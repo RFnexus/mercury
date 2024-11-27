@@ -1279,6 +1279,30 @@ void cl_arq_controller::process_user_command(std::string command)
 		tcp_socket_control.message->buffer[2]='\r';
 		tcp_socket_control.message->length=3;
 	}
+	// else if(command=="SEND ALL")
+	// {
+	//     if(true)
+	//     {
+	//         connection_status=TRANSMITTING_DATA;
+	//         block_under_tx=NO; // Reset the flag to allow new data transmission
+	//         this->link_status=CONNECTED;
+	//         link_status=CONNECTED;
+	//         tcp_socket_control.message->buffer[0]='O';
+	//         tcp_socket_control.message->buffer[1]='K';
+	//         tcp_socket_control.message->buffer[2]='\r';
+	//         tcp_socket_control.message->length=3;
+	//     }
+	//     else
+	//     {
+	//         tcp_socket_control.message->buffer[0]='E';
+	//         tcp_socket_control.message->buffer[1]='R';
+	//         tcp_socket_control.message->buffer[2]='R';
+	//         tcp_socket_control.message->buffer[3]='O';
+	//         tcp_socket_control.message->buffer[4]='R';
+	//         tcp_socket_control.message->buffer[5]='\r';
+	//         tcp_socket_control.message->length=6;
+	//     }
+	// }
 	else if(command=="BW2300")
 	{
 		telecom_system->bandwidth=2300;
@@ -1289,6 +1313,7 @@ void cl_arq_controller::process_user_command(std::string command)
 		tcp_socket_control.message->buffer[2]='\r';
 		tcp_socket_control.message->length=3;
 	}
+
 	else if(command=="BW2500")
 	{
 		telecom_system->bandwidth=2500;
@@ -1298,7 +1323,39 @@ void cl_arq_controller::process_user_command(std::string command)
 		tcp_socket_control.message->buffer[1]='K';
 		tcp_socket_control.message->buffer[2]='\r';
 		tcp_socket_control.message->length=3;
-	}
+	} 
+	else if(command=="CONNECTION STATUS") 
+	    {
+	    	static const char* connection_status_strings[] = {
+			    "DROPPED", "IDLE", "CONNECTING", "CONNECTED",
+			    "DISCONNECTING", "LISTENING", "CONNECTION_RECEIVED",
+			    "CONNECTION_ACCEPTED", "NEGOTIATING"
+			};
+
+			if (connection_status >= 0 && connection_status < sizeof(connection_status_strings) / sizeof(connection_status_strings[0])) {
+			    connection_status_string = connection_status_strings[connection_status];
+			} else {
+			    connection_status_string = "UNKNOWN";
+			}
+
+	        reply += connection_status_string;
+
+	       
+	        reply += "\r";
+
+	       
+	        for(size_t i = 0; i < reply.length(); i++)
+	        {
+	            tcp_socket_control.message->buffer[i] = reply[i];
+	        }
+	        tcp_socket_control.message->length = reply.length();
+
+
+	        if (tcp_socket_control.get_status() == TCP_STATUS_ACCEPTED)
+	        {
+	            tcp_socket_control.transmit();
+	        }
+	 }
 	else if(command=="BUFFER TX")
 	{
 		std::string reply="BUFFER ";
