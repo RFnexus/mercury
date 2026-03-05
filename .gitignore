@@ -1,0 +1,35 @@
+# Build artifacts
+*.o
+*.a
+mercury
+*.exe
+*.dll
+*.so
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+/tmp/
+*.tmp
+
+.git_hash_stamp
+*.deb
+*.rpm
+*.tar.gz
+*.zip
+
+# FreeDV binaries
+modem/freedv/freedv_data_*
+utils/broadcast_diag_rx
+utils/broadcast_diag_tx
+utils/broadcast_test
