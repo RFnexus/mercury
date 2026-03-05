@@ -267,8 +267,22 @@ static void execute_control_command(char *buffer)
 
     if (!memcmp(buffer, "CHAT", strlen("CHAT")))
     {
-        /* Compatibility no-op: VARA-style clients expect this command. */
-        tcp_write(CTL_TCP_PORT, (uint8_t *)"OK\r", 3);
+        /* CHAT ON implies LISTEN ON (VARA compatibility).
+         * CHAT OFF is a no-op — Mercury does not limit idle loops. */
+        sscanf(buffer, "CHAT %15s", temp);
+        if (temp[1] == 'N')
+        {
+            memset(&cmd, 0, sizeof(cmd));
+            cmd.type = ARQ_CMD_LISTEN_ON;
+            if (arq_submit_tcp_cmd(&cmd) == 0)
+                tcp_write(CTL_TCP_PORT, (uint8_t *)"OK\r", 3);
+            else
+                tcp_write(CTL_TCP_PORT, (uint8_t *)"WRONG\r", 6);
+        }
+        else
+        {
+            tcp_write(CTL_TCP_PORT, (uint8_t *)"OK\r", 3);
+        }
         return;
     }
 

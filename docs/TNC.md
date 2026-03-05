@@ -101,17 +101,21 @@ clients (e.g., Pat, VarAC) can connect without errors.
 
 ### CHAT
 
-No-op for VARA client compatibility.
+Enable chat-optimized mode (VARA compatibility).
 
 ```
 CHAT ON\r
 CHAT OFF\r
 ```
 
-**Response:** `OK\r` (always).
+**Response:** `OK\r` on success, `WRONG\r` on error.
 
-Mercury does not distinguish chat from data mode; this command exists so
-VARA-compatible clients can connect without errors.
+`CHAT ON` implicitly enables `LISTEN ON`, placing Mercury in the LISTENING
+state.  This matches VARA behavior where chat applications (VarAC, VARA Chat)
+expect the modem to be ready for incoming connections after `CHAT ON`.
+
+`CHAT OFF` is acknowledged but has no effect — Mercury does not currently
+differentiate chat and file-transfer timing.
 
 ---
 
