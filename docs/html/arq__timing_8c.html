@@ -229,6 +229,8 @@ Functions</h2></td></tr>
 <p>Record ACK received; computes and logs OTA RTT. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">ctx</td><td>Timing context. </td></tr>
+    <tr><td class="paramname">seq</td><td>TX sequence number being ACKed. </td></tr>
     <tr><td class="paramname">ack_delay_raw</td><td>Wire-encoded ack_delay (10ms units, 0=unknown). </td></tr>
     <tr><td class="paramname">peer_snr_x10</td><td>Peer-reported SNR * 10. </td></tr>
   </table>
@@ -410,6 +412,8 @@ Functions</h2></td></tr>
 <p>Record a retry event; logs [TMG] retry. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">ctx</td><td>Timing context. </td></tr>
+    <tr><td class="paramname">seq</td><td>TX sequence number. </td></tr>
     <tr><td class="paramname">attempt</td><td>1-based retry number. </td></tr>
     <tr><td class="paramname">reason</td><td>Short reason string (e.g. "timeout", "nack"). </td></tr>
   </table>
@@ -453,6 +457,7 @@ Functions</h2></td></tr>
 <p>Record turn direction change; logs [TMG] turn. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">ctx</td><td>Timing context. </td></tr>
     <tr><td class="paramname">to_iss</td><td>true = becoming ISS, false = becoming IRS. </td></tr>
     <tr><td class="paramname">reason</td><td>"piggyback", "turn_req", "startup" etc. </td></tr>
   </table>
@@ -538,6 +543,10 @@ Functions</h2></td></tr>
 <p>Record frame queued for TX; logs [TMG] tx_queue. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">ctx</td><td>Timing context. </td></tr>
+    <tr><td class="paramname">seq</td><td>TX sequence number. </td></tr>
+    <tr><td class="paramname">mode</td><td>FreeDV mode used for TX. </td></tr>
+    <tr><td class="paramname">backlog_bytes</td><td>Application bytes remaining in TX queue. </td></tr>
     <tr><td class="paramname">payload_bytes</td><td>Actual application bytes in this frame (0 for retransmits). </td></tr>
   </table>
   </dd>

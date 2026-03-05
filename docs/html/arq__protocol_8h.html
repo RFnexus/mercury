@@ -1128,6 +1128,9 @@ Variables</h2></td></tr>
 <p>Build an ACCEPT frame. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">buf</td><td>Output buffer (caller-provided). </td></tr>
+    <tr><td class="paramname">buf_len</td><td>Size of buf in bytes. </td></tr>
+    <tr><td class="paramname">session_id</td><td>ARQ session identifier. </td></tr>
     <tr><td class="paramname">src</td><td>Local callsign. </td></tr>
     <tr><td class="paramname">dst</td><td>Remote callsign. </td></tr>
   </table>
@@ -1244,6 +1247,9 @@ Variables</h2></td></tr>
 <p>Build a CALL frame. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">buf</td><td>Output buffer (caller-provided). </td></tr>
+    <tr><td class="paramname">buf_len</td><td>Size of buf in bytes. </td></tr>
+    <tr><td class="paramname">session_id</td><td>ARQ session identifier. </td></tr>
     <tr><td class="paramname">src</td><td>Local callsign. </td></tr>
     <tr><td class="paramname">dst</td><td>Remote callsign. </td></tr>
   </table>
@@ -1330,7 +1336,14 @@ Variables</h2></td></tr>
 <p>DATA frame — 8-byte header + payload bytes. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">buf</td><td>Output buffer (caller-provided). </td></tr>
+    <tr><td class="paramname">buf_len</td><td>Size of buf in bytes. </td></tr>
+    <tr><td class="paramname">session_id</td><td>ARQ session identifier. </td></tr>
+    <tr><td class="paramname">tx_seq</td><td>TX sequence number. </td></tr>
+    <tr><td class="paramname">rx_ack_seq</td><td>Last seq received from peer (piggybacked ACK). </td></tr>
     <tr><td class="paramname">flags</td><td>ARQ_FLAG_TURN_REQ | ARQ_FLAG_HAS_DATA (bitmask). </td></tr>
+    <tr><td class="paramname">snr_raw</td><td>Local SNR encoded for wire. </td></tr>
+    <tr><td class="paramname">payload_valid</td><td>Number of valid bytes in the payload slot. </td></tr>
     <tr><td class="paramname">payload</td><td>Payload bytes (must be &lt;= buf_len - ARQ_FRAME_HDR_SIZE). </td></tr>
     <tr><td class="paramname">payload_len</td><td>Number of payload bytes. </td></tr>
   </table>
@@ -1560,6 +1573,10 @@ Variables</h2></td></tr>
 <p>MODE_REQ frame. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">buf</td><td>Output buffer (caller-provided). </td></tr>
+    <tr><td class="paramname">buf_len</td><td>Size of buf in bytes. </td></tr>
+    <tr><td class="paramname">session_id</td><td>ARQ session identifier. </td></tr>
+    <tr><td class="paramname">snr_raw</td><td>Local SNR encoded for wire. </td></tr>
     <tr><td class="paramname">freedv_mode</td><td>Requested payload FreeDV mode (FREEDV_MODE_DATAC*). </td></tr>
   </table>
   </dd>
@@ -1656,7 +1673,11 @@ Variables</h2></td></tr>
 <p>TURN_REQ frame. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">buf</td><td>Output buffer (caller-provided). </td></tr>
+    <tr><td class="paramname">buf_len</td><td>Size of buf in bytes. </td></tr>
+    <tr><td class="paramname">session_id</td><td>ARQ session identifier. </td></tr>
     <tr><td class="paramname">rx_ack_seq</td><td>Last seq received from current ISS (so ISS can flush pending retries). </td></tr>
+    <tr><td class="paramname">snr_raw</td><td>Local SNR encoded for wire. </td></tr>
   </table>
   </dd>
 </dl>
@@ -1935,6 +1956,8 @@ Variables</h2></td></tr>
 <p>Parse a CALL frame; extract callsigns. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
+    <tr><td class="paramname">buf</td><td>Input frame buffer. </td></tr>
+    <tr><td class="paramname">buf_len</td><td>Size of buf in bytes. </td></tr>
     <tr><td class="paramname">session_id_out</td><td>Receives the session_id byte. </td></tr>
     <tr><td class="paramname">src_out</td><td>Buffer for local (transmitting) callsign, CALLSIGN_MAX_SIZE bytes. </td></tr>
     <tr><td class="paramname">dst_out</td><td>Buffer for remote callsign, CALLSIGN_MAX_SIZE bytes. </td></tr>

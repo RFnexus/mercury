@@ -21,7 +21,8 @@ var searchData=
   ['startup_5fdeadline_5fms_18',['startup_deadline_ms',['../structarq__session__t.html#afe12812f1033e6addbead61a164f0c32',1,'arq_session_t']]],
   ['state_5fenter_5fms_19',['state_enter_ms',['../structarq__session__t.html#a989ef9519dd838c58a823fcd59c0a186',1,'arq_session_t']]],
   ['status_20',['status',['../structarq__bus__msg__t.html#a4bcc7dc6a6963a5203ff5f84e57c9ce8',1,'arq_bus_msg_t']]],
-  ['subtype_21',['subtype',['../structarq__frame__hdr__t.html#ab3306926edeac15f15006958f4c9c78a',1,'arq_frame_hdr_t']]],
-  ['symbols_22',['symbols',['../arith_8c.html#a9e9bf70199ddf8cddc096febc32b4a3e',1,'arith.c']]],
-  ['sync_23',['sync',['../structarq__modem__metrics__msg__t.html#a6b3faa76c5ae60c5290bde694dbb08b4',1,'arq_modem_metrics_msg_t']]]
+  ['subsystem_21',['HERMES Modem — ARQ Subsystem',['../index.html',1,'']]],
+  ['subtype_22',['subtype',['../structarq__frame__hdr__t.html#ab3306926edeac15f15006958f4c9c78a',1,'arq_frame_hdr_t']]],
+  ['symbols_23',['symbols',['../arith_8c.html#a9e9bf70199ddf8cddc096febc32b4a3e',1,'arith.c']]],
+  ['sync_24',['sync',['../structarq__modem__metrics__msg__t.html#a6b3faa76c5ae60c5290bde694dbb08b4',1,'arq_modem_metrics_msg_t']]]
 ];
