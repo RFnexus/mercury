@@ -29,7 +29,13 @@ Thumbs.db
 *.zip
 
 # FreeDV binaries
-modem/freedv/freedv_data_*
+modem/freedv/freedv_data_raw_rx
+modem/freedv/freedv_data_raw_tx
+modem/freedv/freedv_data_rx
+modem/freedv/freedv_data_tx
+modem/freedv/libfreedvdata.a
+
+# Broadcast binaries
 utils/broadcast_diag_rx
 utils/broadcast_diag_tx
 utils/broadcast_test
