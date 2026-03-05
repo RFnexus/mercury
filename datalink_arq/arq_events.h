@@ -1,3 +1,11 @@
+/* Mercury Modem — ARQ event and command definitions
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef ARQ_EVENTS_H_
 #define ARQ_EVENTS_H_
 

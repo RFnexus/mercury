@@ -1,3 +1,11 @@
+/* Mercury Modem — broadcast diagnostic receiver
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>

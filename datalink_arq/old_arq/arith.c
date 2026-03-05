@@ -1,3 +1,11 @@
+/* Mercury Modem — arithmetic coding for ARQ (legacy)
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>

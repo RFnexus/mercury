@@ -1,3 +1,11 @@
+/* Mercury Modem — thread-safe channel interface
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef chan_h
 #define chan_h
 

@@ -1,3 +1,11 @@
+/* Mercury Modem — async logging interface
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef HERMES_LOG_H_
 #define HERMES_LOG_H_
 

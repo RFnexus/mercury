@@ -1,3 +1,11 @@
+/* Mercury Modem — ARQ message-bus channels
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "arq_channels.h"
 
 #include <errno.h>

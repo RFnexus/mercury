@@ -1,3 +1,11 @@
+/* Mercury Modem — CRC-6/CRC-5 computation
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 
 #include <stdint.h>
 

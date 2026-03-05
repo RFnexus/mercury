@@ -1,3 +1,11 @@
+/* Mercury Modem — FIFO queue interface
+ *
+ * Copyright (C) 2025-2026 Rhizomatica
+ * Author: Rafael Diniz <rafael@riseup.net>
+ *
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef queue_h
 #define queue_h
 
