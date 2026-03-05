@@ -99,6 +99,22 @@ clients (e.g., Pat, VarAC) can connect without errors.
 
 ---
 
+### CHAT
+
+No-op for VARA client compatibility.
+
+```
+CHAT ON\r
+CHAT OFF\r
+```
+
+**Response:** `OK\r` (always).
+
+Mercury does not distinguish chat from data mode; this command exists so
+VARA-compatible clients can connect without errors.
+
+---
+
 ### P2P
 
 No-op for VARA client compatibility.
