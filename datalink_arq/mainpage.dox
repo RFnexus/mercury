@@ -11,6 +11,8 @@ This documentation covers the ARQ data link subsystem API.
 
 - [ARQ Protocol & Architecture (ARQ.md)](https://github.com/Rhizomatica/mercury/blob/mercuryv2/docs/ARQ.md) —
   Full protocol reference, state machine, OTA tuning guide.
+- [TNC Command Reference (TNC.md)](https://github.com/Rhizomatica/mercury/blob/mercuryv2/docs/TNC.md) —
+  TCP TNC interface commands, responses, and session flow.
 - [Mercury README](https://github.com/Rhizomatica/mercury/tree/mercuryv2) —
   Build instructions, CLI usage, logging.
 - [mercury-qt GUI](https://github.com/Rhizomatica/mercury-qt) —
