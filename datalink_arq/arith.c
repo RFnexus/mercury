@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NUM_SYMBOLS 39  // 37 symbols + 1 EOF + separator
+#define NUM_SYMBOLS 38  // 37 symbols + 1 EOF
 #define CODE_BITS 32
 #define MAX_CODE ((1ULL << CODE_BITS) - 1)
 #define HALF (1ULL << (CODE_BITS - 1))
@@ -24,7 +24,7 @@
 char symbols[NUM_SYMBOLS] = {
     'A','B','C','D','E','F','G','H','I','J','K','L','M',
     'N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
-    '0','1','2','3','4','5','6','7','8','9','-', '|',
+    '0','1','2','3','4','5','6','7','8','9','-',
     '\0'  // EOF symbol
 };
 

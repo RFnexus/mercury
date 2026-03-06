@@ -59,7 +59,8 @@
  *
  *  Byte 0: framer byte (PACKET_TYPE_ARQ_CALL | CRC5, set by write_frame_header)
  *  Byte 1: connect_meta  = (session_id & 0x7F) | (is_accept ? 0x80 : 0x00)
- *  Bytes 2-13: arithmetic-encoded "DST|SRC" callsign string (12 bytes max)
+ *  Bytes 2-3:  CRC16-CCITT of DST callsign (little-endian) — for local validation
+ *  Bytes 4-13: arithmetic_encode(SRC callsign only) — 10 bytes, fits callsigns up to ~14 chars
  */
 #define ARQ_CONNECT_SESSION_IDX       1
 #define ARQ_CONNECT_PAYLOAD_IDX       2
@@ -68,6 +69,8 @@
 #define ARQ_CONTROL_FRAME_SIZE        14
 #define ARQ_CONNECT_META_SIZE         2   /* framer byte + connect_meta byte */
 #define ARQ_CONNECT_MAX_ENCODED       (ARQ_CONTROL_FRAME_SIZE - ARQ_CONNECT_META_SIZE)
+#define ARQ_CONNECT_DST_CRC_SIZE      2   /* CRC16-CCITT of DST at bytes [2..3], little-endian */
+#define ARQ_CONNECT_SRC_MAX_ENCODED   (ARQ_CONNECT_MAX_ENCODED - ARQ_CONNECT_DST_CRC_SIZE) /* 10 */
 
 /* ======================================================================
  * Flags byte (byte 2)
@@ -250,6 +253,12 @@ uint32_t arq_protocol_decode_ack_delay(uint8_t raw);
  * @return Pointer to timing entry, or NULL if mode is unknown.
  */
 const arq_mode_timing_t *arq_protocol_mode_timing(int freedv_mode);
+
+/**
+ * @brief Compute CRC16-CCITT of an uppercase-normalised callsign.
+ * Used to encode/validate the DST field in CALL/ACCEPT frames.
+ */
+uint16_t arq_protocol_callsign_crc16(const char *callsign);
 
 /* ======================================================================
  * Frame builder API

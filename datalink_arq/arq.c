@@ -397,6 +397,18 @@ bool arq_handle_incoming_connect_frame(uint8_t *data, size_t frame_size)
         return false;
     }
 
+    /* Validate that DST CRC16 matches our own callsign */
+    if (arq_conn.my_call_sign[0] != 0)
+    {
+        uint16_t frame_crc = (uint16_t)data[ARQ_CONNECT_PAYLOAD_IDX]
+                           | ((uint16_t)data[ARQ_CONNECT_PAYLOAD_IDX + 1] << 8);
+        if (frame_crc != arq_protocol_callsign_crc16(arq_conn.my_call_sign))
+        {
+            HLOGD(LOG_COMP, "CALL/ACCEPT not for us (DST CRC16 mismatch)");
+            return false;
+        }
+    }
+
     arq_event_t ev = {0};
     ev.id         = is_accept ? ARQ_EV_RX_ACCEPT : ARQ_EV_RX_CALL;
     ev.session_id = session_id;
