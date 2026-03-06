@@ -21,20 +21,19 @@
  */
 
 #include "net.h"
+#include "os_interop.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/types.h> 
+#include <sys/types.h>
+#if !defined(_WIN32)
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <errno.h>
+#endif
 #include <time.h>
 
 #include <pthread.h>
-
-#include <sys/ioctl.h>
 
 static int ctl_sockfd, data_sockfd;
 
@@ -206,10 +205,10 @@ int tcp_open(int portno, int port_type)
     }
 
     int opt = 1;  
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt)) < 0)
     {
         fprintf(stderr, "setsockopt(SO_REUSEADDR) failed\n");
-        close(sockfd);
+        SOCK_CLOSE(sockfd);
         return -1;
     }
       
@@ -248,20 +247,20 @@ ssize_t tcp_read(int port_type, uint8_t *buffer, size_t rx_size)
 
     if (port_type == CTL_TCP_PORT && net_get_status(CTL_TCP_PORT) == NET_CONNECTED)
     {
-        ioctl(cli_ctl_sockfd, FIONREAD, &count);
+        SOCK_IOCTL(cli_ctl_sockfd, FIONREAD, &count);
         if (count < rx_size)
             rx_size = count ? count : rx_size;
-        n = recv(cli_ctl_sockfd, buffer, rx_size, MSG_NOSIGNAL);
+        n = recv(cli_ctl_sockfd, (char *)buffer, rx_size, MSG_NOSIGNAL);
 
         if (n < 0)
             net_set_status(CTL_TCP_PORT, NET_RESTART);
     }
     if (port_type == DATA_TCP_PORT && net_get_status(DATA_TCP_PORT) == NET_CONNECTED)
     {
-        ioctl(cli_data_sockfd, FIONREAD, &count);
+        SOCK_IOCTL(cli_data_sockfd, FIONREAD, &count);
         if (count < rx_size)
             rx_size = count ? count : rx_size;
-        n = recv(cli_data_sockfd, buffer, rx_size, MSG_NOSIGNAL);
+        n = recv(cli_data_sockfd, (char *)buffer, rx_size, MSG_NOSIGNAL);
 
         if (n < 0)
             net_set_status(DATA_TCP_PORT, NET_RESTART);
@@ -285,14 +284,14 @@ ssize_t tcp_write(int port_type, uint8_t *buffer, size_t tx_size)
     if (port_type == CTL_TCP_PORT && net_get_status(CTL_TCP_PORT) == NET_CONNECTED)
     {
         attempted_send = 1;
-        n = send(cli_ctl_sockfd, buffer, tx_size, MSG_NOSIGNAL);
+        n = send(cli_ctl_sockfd, (const char *)buffer, tx_size, MSG_NOSIGNAL);
 
         if (n < 0)
         {
             /* EAGAIN/EWOULDBLOCK: non-blocking socket whose send buffer is
              * momentarily full.  This is a transient condition; drop the
              * message but do NOT tear down the connection. */
-            if (errno != EAGAIN && errno != EWOULDBLOCK)
+            if (sock_errno() != SOCK_EAGAIN && sock_errno() != SOCK_EWOULDBLOCK)
                 net_set_status(CTL_TCP_PORT, NET_RESTART);
         }
         else if (n != (ssize_t) tx_size)
@@ -305,11 +304,11 @@ ssize_t tcp_write(int port_type, uint8_t *buffer, size_t tx_size)
     if (port_type == DATA_TCP_PORT && net_get_status(DATA_TCP_PORT) == NET_CONNECTED)
     {
         attempted_send = 1;
-        n = send(cli_data_sockfd, buffer, tx_size, MSG_NOSIGNAL);
+        n = send(cli_data_sockfd, (const char *)buffer, tx_size, MSG_NOSIGNAL);
 
         if (n < 0)
         {
-            if (errno != EAGAIN && errno != EWOULDBLOCK)
+            if (sock_errno() != SOCK_EAGAIN && sock_errno() != SOCK_EWOULDBLOCK)
                 net_set_status(DATA_TCP_PORT, NET_RESTART);
         }
         else if (n != (ssize_t) tx_size)
@@ -331,14 +330,14 @@ int tcp_close(int port_type)
 
     if(port_type == CTL_TCP_PORT)
     {
-        close(cli_ctl_sockfd);
-        close(ctl_sockfd);
+        SOCK_CLOSE(cli_ctl_sockfd);
+        SOCK_CLOSE(ctl_sockfd);
         net_set_status(CTL_TCP_PORT, NET_NONE);
     }
     if(port_type == DATA_TCP_PORT)
     {
-        close(cli_data_sockfd);
-        close(data_sockfd);
+        SOCK_CLOSE(cli_data_sockfd);
+        SOCK_CLOSE(data_sockfd);
         net_set_status(DATA_TCP_PORT, NET_NONE);
     }
     

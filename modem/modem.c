@@ -296,25 +296,31 @@ static int maybe_switch_modem_mode(generic_modem_t *g_modem,
 
 int init_modem(generic_modem_t *g_modem, int mode, int frames_per_burst, int test_mode, int freedv_verbosity)
 {
-// connect to shared memory buffers
-try_shm_connect1:
-    capture_buffer = circular_buf_connect_shm(SIGNAL_BUFFER_SIZE, SIGNAL_INPUT);
+// connect to shared memory buffers (skip if audioio already set them up)
     if (capture_buffer == NULL)
     {
-        printf("Shared memory not created. Waiting for the radio daemon\n");
-        sleep(1);
-        goto try_shm_connect1;
+try_shm_connect1:
+        capture_buffer = circular_buf_connect_shm(SIGNAL_BUFFER_SIZE, SIGNAL_INPUT);
+        if (capture_buffer == NULL)
+        {
+            printf("Shared memory not created. Waiting for the radio daemon\n");
+            sleep(1);
+            goto try_shm_connect1;
+        }
     }
 
-try_shm_connect2:
-    playback_buffer = circular_buf_connect_shm(SIGNAL_BUFFER_SIZE, SIGNAL_OUTPUT);
     if (playback_buffer == NULL)
     {
-        printf("Shared memory not created. Waiting for the radio daemon...\n");
-        sleep(1);
-        goto try_shm_connect2;
+try_shm_connect2:
+        playback_buffer = circular_buf_connect_shm(SIGNAL_BUFFER_SIZE, SIGNAL_OUTPUT);
+        if (playback_buffer == NULL)
+        {
+            printf("Shared memory not created. Waiting for the radio daemon...\n");
+            sleep(1);
+            goto try_shm_connect2;
+        }
+        printf("Connected to Shared Memory Radio I/O tx/rx buffers.\n");
     }
-    printf("Connected to Shared Memory Radio I/O tx/rx buffers.\n");
 
     // buffers for the ARQ datalink
     uint8_t *buffer_tx = (uint8_t *) malloc(DATA_TX_BUFFER_SIZE);

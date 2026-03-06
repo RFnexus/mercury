@@ -41,7 +41,10 @@ endif
 
 include config.mk
 
-.PHONY: all install internal_deps utils clean doxygen doxygen-clean FORCE
+MINGW_CC  = x86_64-w64-mingw32-gcc
+MINGW_AR  = x86_64-w64-mingw32-ar
+
+.PHONY: all install internal_deps utils clean doxygen doxygen-clean windows FORCE
 
 prefix ?= /usr
 bindir ?= $(prefix)/bin
@@ -50,6 +53,12 @@ DOXYGEN ?= doxygen
 DOXYFILE ?= Doxyfile
 
 CFLAGS = $(COMMON_CFLAGS) -Imodem/freedv -Imodem -Idatalink_broadcast -Idata_interfaces -Idatalink_arq -Iaudioio/ffaudio -Icommon
+
+ifeq ($(OS),Windows_NT)
+BINARY = mercury.exe
+else
+BINARY = mercury
+endif
 
 LDFLAGS=$(FFAUDIO_LINKFLAGS) -lm
 
@@ -61,14 +70,14 @@ MERCURY_LINK_INPUTS = \
 	common/chan.o common/queue.o data_interfaces/tcp_interfaces.o data_interfaces/net.o
 
 all: internal_deps utils
-	$(MAKE) mercury
+	$(MAKE) $(BINARY)
 	$(MAKE) -C utils
 
 install: all
-	install -D -m 755 mercury $(DESTDIR)$(bindir)/mercury
+	install -D -m 755 $(BINARY) $(DESTDIR)$(bindir)/mercury
 
-mercury: $(MERCURY_LINK_INPUTS)
-	$(CC) -o mercury  \
+$(BINARY): $(MERCURY_LINK_INPUTS)
+	$(CC) -o $(BINARY)  \
 		$(MERCURY_LINK_INPUTS) $(LDFLAGS)
 
 # Stamp file: written only when GIT_HASH changes so main.o is rebuilt
@@ -93,8 +102,12 @@ internal_deps:
 	$(MAKE) -C common
 
 
+windows:
+	$(MAKE) clean OS=Windows_NT CC=$(MINGW_CC) AR=$(MINGW_AR)
+	$(MAKE) -j$$(nproc) OS=Windows_NT CC=$(MINGW_CC) AR=$(MINGW_AR)
+
 clean:
-	rm -f mercury *.o .git_hash_stamp
+	rm -f mercury mercury.exe *.o .git_hash_stamp
 	$(MAKE) -C modem clean
 	$(MAKE) -C datalink_arq clean
 	$(MAKE) -C datalink_broadcast clean

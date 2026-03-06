@@ -14,9 +14,31 @@
 #if defined(_WIN32)
 
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+#include <pthread.h>
 #include <io.h>
 #include <time.h>
+
+/* Socket compatibility */
+#define SOCK_CLOSE(fd) closesocket(fd)
+#define SOCK_IOCTL(fd, cmd, argp) ioctlsocket((SOCKET)(fd), (long)(cmd), (u_long*)(argp))
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+#define poll(fds, nfds, timeout) WSAPoll((fds), (ULONG)(nfds), (timeout))
+typedef ULONG nfds_t;
+
+static inline int sock_set_nonblocking(int fd)
+{
+    u_long one = 1;
+    return ioctlsocket((SOCKET)fd, FIONBIO, &one) == 0 ? 0 : -1;
+}
+
+static inline int sock_errno(void) { return WSAGetLastError(); }
+#define SOCK_EAGAIN      WSAEWOULDBLOCK
+#define SOCK_EWOULDBLOCK WSAEWOULDBLOCK
+#define SOCK_EINTR       WSAEINTR
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,6 +95,25 @@ int COND_SIGNAL(HANDLE *mqh_wait);
 #include <sys/mman.h>
 #include <sys/stat.h>        /* For mode constants */
 #include <unistd.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <errno.h>
+
+/* Socket compatibility */
+#define SOCK_CLOSE(fd) close(fd)
+#define SOCK_IOCTL(fd, cmd, argp) ioctl((fd), (unsigned long)(cmd), (argp))
+
+static inline int sock_set_nonblocking(int fd)
+{
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) return -1;
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+static inline int sock_errno(void) { return errno; }
+#define SOCK_EAGAIN      EAGAIN
+#define SOCK_EWOULDBLOCK EWOULDBLOCK
+#define SOCK_EINTR       EINTR
 
 #define MUTEX_LOCK(x)   pthread_mutex_lock(x)
 #define MUTEX_UNLOCK(x) pthread_mutex_unlock(x)

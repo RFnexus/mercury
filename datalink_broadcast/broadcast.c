@@ -25,7 +25,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <pthread.h>
+#if !defined(_WIN32)
 #include <arpa/inet.h>
+#endif
 
 #include "modem.h"
 #include "arq.h"

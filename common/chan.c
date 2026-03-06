@@ -36,17 +36,6 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#define CLOCK_REALTIME 0
-static int clock_gettime (int __attribute__((__unused__)) clockid, struct timespec *tp) {
-    FILETIME ft;
-    ULARGE_INTEGER t64;
-    GetSystemTimeAsFileTime (&ft);
-    t64.LowPart = ft.dwLowDateTime;
-    t64.HighPart = ft.dwHighDateTime;
-    tp->tv_sec = t64.QuadPart / 10000000 - 11644473600;
-    tp->tv_nsec = t64.QuadPart % 10000000 * 100;
-    return 0;
-}
 #endif
 
 static int buffered_chan_init(chan_t* chan, size_t capacity);
@@ -477,7 +466,12 @@ int chan_select(chan_t* recv_chans[], int recv_count, void** recv_out,
     seed = (unsigned int)(ts.tv_nsec ^ (unsigned long)pthread_self());
 
     // Select candidate and perform operation.
+#ifdef _WIN32
+    srand(seed);
+    select_op_t select = candidates[rand() % count];
+#else
     select_op_t select = candidates[rand_r(&seed) % count];
+#endif
     if (select.recv && chan_recv(select.chan, recv_out) != 0)
     {
         return -1;

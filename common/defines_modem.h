@@ -21,7 +21,9 @@
 #ifndef HAVE_DEFINES_MODEM_H
 #define HAVE_DEFINES_MODEM_H
 
+#ifndef MAX_PATH
 #define MAX_PATH 255
+#endif
 
 // {TX,RX}_SHM broadcast memory interface
 #define SHM_PAYLOAD_BUFFER_SIZE 131072

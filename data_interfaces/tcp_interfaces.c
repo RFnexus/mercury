@@ -20,20 +20,22 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdatomic.h>
-#include <fcntl.h>
+#include <sys/types.h>
+#if !defined(_WIN32)
+#include <unistd.h>
 #include <poll.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <errno.h>
+#endif
+
+#include "os_interop.h"
 
 #include "tcp_interfaces.h"
 #include "ring_buffer_posix.h"
@@ -79,7 +81,7 @@ static ssize_t send_all(int socket_fd, const uint8_t *buffer, size_t len)
 
     while (total_sent < len)
     {
-        ssize_t sent = send(socket_fd, buffer + total_sent, len - total_sent, HERMES_SEND_FLAGS);
+        ssize_t sent = send(socket_fd, (const char *)buffer + total_sent, len - total_sent, HERMES_SEND_FLAGS);
         if (sent <= 0)
         {
             return -1;
@@ -139,15 +141,9 @@ static uint64_t monotonic_ms(void)
 
 static int set_nonblocking(int fd)
 {
-    int flags;
     if (fd < 0)
         return -1;
-    flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0)
-        return -1;
-    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
-        return -1;
-    return 0;
+    return sock_set_nonblocking(fd);
 }
 
 static int open_listener_socket(int port, int port_type, const char *tag)
@@ -160,9 +156,9 @@ static int open_listener_socket(int port, int port_type, const char *tag)
     if (fd < 0)
         return -1;
 
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt)) < 0)
     {
-        close(fd);
+        SOCK_CLOSE(fd);
         return -1;
     }
 
@@ -173,17 +169,17 @@ static int open_listener_socket(int port, int port_type, const char *tag)
 
     if (bind(fd, (struct sockaddr *)&local_addr, sizeof(local_addr)) < 0)
     {
-        close(fd);
+        SOCK_CLOSE(fd);
         return -1;
     }
     if (listen(fd, 1) < 0)
     {
-        close(fd);
+        SOCK_CLOSE(fd);
         return -1;
     }
     if (set_nonblocking(fd) < 0)
     {
-        close(fd);
+        SOCK_CLOSE(fd);
         return -1;
     }
 
@@ -384,7 +380,7 @@ static void close_data_client(int *data_client_fd)
     if (!data_client_fd || *data_client_fd < 0)
         return;
 
-    close(*data_client_fd);
+    SOCK_CLOSE(*data_client_fd);
     *data_client_fd = -1;
     cli_data_sockfd = -1;
     net_set_status(DATA_TCP_PORT, NET_LISTENING);
@@ -396,7 +392,7 @@ static void close_ctl_client(int *ctl_client_fd, int *data_client_fd, bool notif
     if (!ctl_client_fd || *ctl_client_fd < 0)
         return;
 
-    close(*ctl_client_fd);
+    SOCK_CLOSE(*ctl_client_fd);
     *ctl_client_fd = -1;
     cli_ctl_sockfd = -1;
     net_set_status(CTL_TCP_PORT, NET_LISTENING);
@@ -485,7 +481,7 @@ static void *arq_reactor_thread(void *port)
     if (data_listener < 0)
     {
         HLOGE("tcp-data", "Could not open TCP port %d", tcp_base_port + 1);
-        close(ctl_listener);
+        SOCK_CLOSE(ctl_listener);
         net_set_status(CTL_TCP_PORT, NET_NONE);
         shutdown_ = true;
         return NULL;
@@ -531,7 +527,7 @@ static void *arq_reactor_thread(void *port)
             {
                 if (set_nonblocking(fd) < 0)
                 {
-                    close(fd);
+                    SOCK_CLOSE(fd);
                 }
                 else
                 {
@@ -561,7 +557,7 @@ static void *arq_reactor_thread(void *port)
             {
                 if (set_nonblocking(fd) < 0)
                 {
-                    close(fd);
+                    SOCK_CLOSE(fd);
                 }
                 else
                 {
@@ -584,12 +580,12 @@ static void *arq_reactor_thread(void *port)
             }
             else if (events & POLLIN)
             {
-                ssize_t n = recv(ctl_client, rx_buf, sizeof(rx_buf), 0);
+                ssize_t n = recv(ctl_client, (char *)rx_buf, sizeof(rx_buf), 0);
                 if (n > 0)
                 {
                     process_control_bytes(ctl_line, &ctl_len, rx_buf, n);
                 }
-                else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR))
+                else if (n == 0 || (n < 0 && sock_errno() != SOCK_EAGAIN && sock_errno() != SOCK_EWOULDBLOCK && sock_errno() != SOCK_EINTR))
                 {
                     close_ctl_client(&ctl_client, &data_client, true);
                 }
@@ -605,7 +601,7 @@ static void *arq_reactor_thread(void *port)
             }
             else if (events & POLLIN)
             {
-                ssize_t n = recv(data_client, rx_buf, sizeof(rx_buf), 0);
+                ssize_t n = recv(data_client, (char *)rx_buf, sizeof(rx_buf), 0);
                 if (n > 0)
                 {
                     int queued = arq_submit_tcp_payload(rx_buf, (size_t)n);
@@ -614,7 +610,7 @@ static void *arq_reactor_thread(void *port)
                     else
                         tnc_send_buffer((uint32_t)arq_buffered_bytes_snapshot());
                 }
-                else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR))
+                else if (n == 0 || (n < 0 && sock_errno() != SOCK_EAGAIN && sock_errno() != SOCK_EWOULDBLOCK && sock_errno() != SOCK_EINTR))
                 {
                     close_data_client(&data_client);
                 }
@@ -676,9 +672,9 @@ static void *arq_reactor_thread(void *port)
     close_data_client(&data_client);
     drain_tnc_queue_to_ctl();
     if (ctl_listener >= 0)
-        close(ctl_listener);
+        SOCK_CLOSE(ctl_listener);
     if (data_listener >= 0)
-        close(data_listener);
+        SOCK_CLOSE(data_listener);
     net_set_status(CTL_TCP_PORT, NET_NONE);
     net_set_status(DATA_TCP_PORT, NET_NONE);
     return NULL;
@@ -796,7 +792,7 @@ void *recv_thread(void *client_socket_ptr)
 
     while (!shutdown_)
     {
-        ssize_t received = recv(client_socket, buffer, DATA_TX_BUFFER_SIZE, 0);
+        ssize_t received = recv(client_socket, (char *)buffer, DATA_TX_BUFFER_SIZE, 0);
         if (received > 0)
         {
             for (ssize_t i = 0; i < received; i++)
@@ -850,10 +846,10 @@ void *tcp_server_thread(void *port_ptr)
         return NULL;
     }
 
-    if (setsockopt(tcp_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    if (setsockopt(tcp_socket, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt)) < 0)
     {
         perror("Failed to set SO_REUSEADDR on broadcast TCP socket");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return NULL;
     }
 
@@ -865,14 +861,14 @@ void *tcp_server_thread(void *port_ptr)
     if (bind(tcp_socket, (struct sockaddr *)&local_addr, sizeof(local_addr)) < 0)
     {
         perror("Failed to bind TCP socket");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return NULL;
     }
 
     if (listen(tcp_socket, 1) < 0)
     {
         perror("Failed to listen on TCP socket");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return NULL;
     }
 
@@ -902,11 +898,11 @@ void *tcp_server_thread(void *port_ptr)
         pthread_cancel(send_tid);
         pthread_join(send_tid, NULL);
 
-        close(client_socket);
+        SOCK_CLOSE(client_socket);
         printf("Waiting for a new client to connect...\n");
     }
 
-    close(tcp_socket);
+    SOCK_CLOSE(tcp_socket);
     return NULL;
 }
 
