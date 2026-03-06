@@ -106,12 +106,15 @@ The payload size is determined by the FreeDV mode in use.
 CALL and ACCEPT use a different layout to fit two callsigns in 14 bytes:
 
 ```
-Byte 0:    framer byte  (PACKET_TYPE_ARQ_CALL | CRC5)
-Byte 1:    connect_meta = (session_id & 0x7F) | (is_accept ? 0x80 : 0x00)
-Bytes 2-13 arithmetic-encoded "DST|SRC" callsign string (12 bytes)
+Byte 0:      framer byte  (PACKET_TYPE_ARQ_CALL | CRC5)
+Byte 1:      connect_meta = (session_id & 0x7F) | (is_accept ? 0x80 : 0x00)
+Bytes 2-3:   CRC16-CCITT of DST callsign (little-endian) — for local validation
+Bytes 4-13:  arithmetic_encode(SRC callsign only) — 10 bytes, fits any realistic callsign
 ```
 
-The callsign pair is compressed with an arithmetic codec (`arith.c`).
+The transmitting side's callsign (SRC) is compressed with an arithmetic codec (`arith.c`).
+The receiving side's callsign (DST) is not transmitted in full; instead its CRC16 is sent
+so the receiver can silently discard frames not addressed to it.
 
 ### CRC5
 
