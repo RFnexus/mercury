@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <limits.h>
+#include "os_interop.h"
 #include <ffaudio/audio.h>
 #include "std.h"
 #ifdef FF_LINUX
@@ -20,7 +21,6 @@
 #include "ring_buffer_posix.h"
 #include "shm_posix.h"
 #include "../common/defines_modem.h"
-#include "os_interop.h"
 
 #include "audioio.h"
 

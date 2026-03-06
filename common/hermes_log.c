@@ -8,6 +8,11 @@
 
 #include "hermes_log.h"
 
+#ifdef _WIN32
+/* Windows localtime_s has reversed argument order from POSIX localtime_r */
+#define localtime_r(timep, result) localtime_s((result), (timep))
+#endif
+
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdbool.h>

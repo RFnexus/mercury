@@ -33,6 +33,10 @@
 #include <sched.h>
 #endif
 
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
+
 
 #include "freedv_api.h"
 #include "ldpc_codes.h"
@@ -110,6 +114,15 @@ int main(int argc, char *argv[])
     printf("\e[0;31mRhizomatica Mercury Version %s (git %.8s)\e[0m\n", VERSION__, GIT_HASH); // we go red
 #elif defined(_WIN32)
     printf("Rhizomatica Mercury Version %s (git %.8s)\n", VERSION__, GIT_HASH);
+#endif
+
+#ifdef _WIN32
+    WSADATA wsa_data;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0)
+    {
+        fprintf(stderr, "WSAStartup failed\n");
+        return EXIT_FAILURE;
+    }
 #endif
     int verbose = 0;
     const int mode_count = (int)(sizeof(freedv_modes) / sizeof(freedv_modes[0]));
@@ -462,6 +475,10 @@ int main(int argc, char *argv[])
     shutdown_modem(&g_modem);
     HLOGI("main", "Shutting down");
     hermes_log_shutdown();
+
+#ifdef _WIN32
+    WSACleanup();
+#endif
 
     return 0;
 
