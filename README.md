@@ -103,11 +103,17 @@ See [docs/ARQ.md](docs/ARQ.md) for full ARQ architecture, protocol reference, an
 
 ## Physical Layer
 
-Mercury uses the FreeDV modulator developed by David Rowe.
+Mercury v2 currently uses FreeDV modulator code developed by David Rowe. We plan to introduce other modulator modes present in Mercury v1.
 
-## Author
+## About
 
-- Rafael Diniz (Rhizomatica, ARQ, Broadcast, TCP interface, etc)
+Mercury v2 is developed by Rhizomatica's HERMES team, namely:
+
+- Rafael Diniz (ARQ, Broadcast, TCP interface, etc)
+- Pedro Messetti (Testing framework, general improvements, etc)
+- Matheus Thibau (Graphical User Interface)
+
+This project is sponsored by ARDC.
 
 ## LICENSE
 
