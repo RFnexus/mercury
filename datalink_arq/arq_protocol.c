@@ -295,64 +295,80 @@ int arq_protocol_build_data(uint8_t *buf, size_t buf_len,
  * CALL/ACCEPT frame builders and parsers
  * ====================================================================== */
 
-/* Encode "DST|SRC" as arithmetic-compressed callsign payload. */
+/* CRC16-CCITT of uppercase-normalised callsign — for DST field validation. */
+uint16_t arq_protocol_callsign_crc16(const char *callsign)
+{
+    char upper[CALLSIGN_MAX_SIZE];
+    int n = 0;
+    for (; callsign[n] && n < (int)sizeof(upper) - 1; n++)
+    {
+        char c = callsign[n];
+        if (c >= 'a' && c <= 'z') c = (char)(c - ('a' - 'A'));
+        upper[n] = c;
+    }
+    upper[n] = 0;
+    return freedv_gen_crc16((unsigned char *)upper, n);
+}
+
+/* New frame layout (bytes 2-13):
+ *   Bytes 0-1: CRC16-CCITT of DST callsign, little-endian  (ARQ_CONNECT_DST_CRC_SIZE)
+ *   Bytes 2-11: arithmetic_encode(SRC only)                 (ARQ_CONNECT_SRC_MAX_ENCODED = 10)
+ *
+ * 10 bytes is sufficient for any realistic callsign
+ * (e.g. "PU2UIT-15" needs ~7 bytes compressed). */
 static int encode_callsign_payload(const char *src, const char *dst,
                                    uint8_t *out, size_t out_cap)
 {
-    char msg[(CALLSIGN_MAX_SIZE * 2) + 2];
     uint8_t tmp[4096];
-    int n, enc_len;
+    int enc_len;
 
-    n = snprintf(msg, sizeof(msg), "%s|%s", dst, src);
-    if (n <= 0 || n >= (int)sizeof(msg))
+    if (out_cap < ARQ_CONNECT_DST_CRC_SIZE)
         return -1;
 
-    /* normalise to uppercase */
-    for (int i = 0; i < n; i++)
-        if (msg[i] >= 'a' && msg[i] <= 'z')
-            msg[i] = (char)(msg[i] - ('a' - 'A'));
+    /* Bytes [0..1]: CRC16 of DST, little-endian */
+    uint16_t crc = arq_protocol_callsign_crc16(dst);
+    out[0] = (uint8_t)(crc & 0xFF);
+    out[1] = (uint8_t)(crc >> 8);
+
+    /* Bytes [2..]: arithmetic_encode(uppercase SRC) */
+    char src_upper[CALLSIGN_MAX_SIZE];
+    int n = 0;
+    for (; src[n] && n < (int)sizeof(src_upper) - 1; n++)
+    {
+        char c = src[n];
+        if (c >= 'a' && c <= 'z') c = (char)(c - ('a' - 'A'));
+        src_upper[n] = c;
+    }
+    src_upper[n] = 0;
 
     init_model();
-    enc_len = arithmetic_encode(msg, tmp);
+    enc_len = arithmetic_encode(src_upper, tmp);
     if (enc_len <= 0)
         return -1;
-    if ((size_t)enc_len > out_cap)
-        enc_len = (int)out_cap;
-    memcpy(out, tmp, (size_t)enc_len);
-    return enc_len;
+
+    size_t src_cap = out_cap - ARQ_CONNECT_DST_CRC_SIZE;
+    if ((size_t)enc_len > src_cap)
+        enc_len = (int)src_cap;
+    memcpy(out + ARQ_CONNECT_DST_CRC_SIZE, tmp, (size_t)enc_len);
+    return (int)(ARQ_CONNECT_DST_CRC_SIZE + (size_t)enc_len);
 }
 
-/* Decode compressed callsign payload into src/dst strings. */
+/* Decode: bytes [2..] are arithmetic-encoded SRC only.
+ * DST is not in the frame; caller validates via CRC at bytes [0..1]. */
 static int decode_callsign_payload(const uint8_t *in, size_t in_len,
                                    char *src_out, char *dst_out)
 {
-    char decoded[(CALLSIGN_MAX_SIZE * 2) + 2];
-    char *sep;
+    if (in_len < ARQ_CONNECT_DST_CRC_SIZE)
+        return -1;
+
+    dst_out[0] = 0;  /* DST not transmitted as string */
 
     init_model();
-    if (arithmetic_decode((uint8_t *)in, (int)in_len, decoded,
-                          (int)sizeof(decoded)) < 0)
+    if (arithmetic_decode((uint8_t *)(in + ARQ_CONNECT_DST_CRC_SIZE),
+                          (int)(in_len - ARQ_CONNECT_DST_CRC_SIZE),
+                          src_out, CALLSIGN_MAX_SIZE) < 0)
         return -1;
-    if (decoded[0] == 0)
-        return -1;
-
-    sep = strchr(decoded, '|');
-    if (sep)
-    {
-        size_t dst_len = (size_t)(sep - decoded);
-        if (dst_len >= CALLSIGN_MAX_SIZE) dst_len = CALLSIGN_MAX_SIZE - 1;
-        memcpy(dst_out, decoded, dst_len);
-        dst_out[dst_len] = 0;
-        strncpy(src_out, sep + 1, CALLSIGN_MAX_SIZE - 1);
-        src_out[CALLSIGN_MAX_SIZE - 1] = 0;
-    }
-    else
-    {
-        /* Only dst present (truncated) */
-        strncpy(dst_out, decoded, CALLSIGN_MAX_SIZE - 1);
-        dst_out[CALLSIGN_MAX_SIZE - 1] = 0;
-        src_out[0] = 0;
-    }
+    src_out[CALLSIGN_MAX_SIZE - 1] = 0;
     return 0;
 }
 
