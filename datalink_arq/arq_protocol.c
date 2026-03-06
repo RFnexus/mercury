@@ -310,12 +310,12 @@ uint16_t arq_protocol_callsign_crc16(const char *callsign)
     return freedv_gen_crc16((unsigned char *)upper, n);
 }
 
-/* New frame layout (bytes 2-13):
- *   Bytes 0-1: CRC16-CCITT of DST callsign, little-endian  (ARQ_CONNECT_DST_CRC_SIZE)
- *   Bytes 2-11: arithmetic_encode(SRC only)                 (ARQ_CONNECT_SRC_MAX_ENCODED = 10)
+/* CALL/ACCEPT payload layout (frame bytes 2-13, i.e. 12 payload bytes):
+ *   Frame bytes 2-3  (payload [0..1]):  CRC16-CCITT of DST callsign, LE  (ARQ_CONNECT_DST_CRC_SIZE)
+ *   Frame bytes 4-13 (payload [2..11]): arithmetic_encode(SRC only)       (ARQ_CONNECT_SRC_MAX_ENCODED = 10)
  *
- * 10 bytes is sufficient for any realistic callsign
- * (e.g. "PU2UIT-15" needs ~7 bytes compressed). */
+ * 10 bytes encodes up to ~14 characters (38-symbol alphabet, ~5.25 bits/sym).
+ * Callsigns longer than 14 characters will fail to encode. */
 static int encode_callsign_payload(const char *src, const char *dst,
                                    uint8_t *out, size_t out_cap)
 {

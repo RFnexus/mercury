@@ -60,7 +60,7 @@
  *  Byte 0: framer byte (PACKET_TYPE_ARQ_CALL | CRC5, set by write_frame_header)
  *  Byte 1: connect_meta  = (session_id & 0x7F) | (is_accept ? 0x80 : 0x00)
  *  Bytes 2-3:  CRC16-CCITT of DST callsign (little-endian) — for local validation
- *  Bytes 4-13: arithmetic_encode(SRC callsign only) — 10 bytes, fits any callsign
+ *  Bytes 4-13: arithmetic_encode(SRC callsign only) — 10 bytes, fits callsigns up to ~14 chars
  */
 #define ARQ_CONNECT_SESSION_IDX       1
 #define ARQ_CONNECT_PAYLOAD_IDX       2
