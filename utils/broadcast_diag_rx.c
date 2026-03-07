@@ -6,7 +6,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -14,10 +13,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/types.h>
+#if !defined(_WIN32)
+#include <arpa/inet.h>
+#include <sys/socket.h>
 #include <unistd.h>
+#endif
 
+#include "../common/os_interop.h"
 #include "crc6.h"
 #include "kiss.h"
 
@@ -49,14 +52,14 @@ static int create_tcp_socket(const char *ip, int port)
     if (inet_pton(AF_INET, ip, &modem_addr.sin_addr) <= 0)
     {
         perror("Invalid modem IP address");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return -1;
     }
 
     if (connect(tcp_socket, (struct sockaddr *)&modem_addr, sizeof(modem_addr)) < 0)
     {
         perror("Failed to connect to modem");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return -1;
     }
 
@@ -116,7 +119,7 @@ int main(int argc, char *argv[])
 
     while (running)
     {
-        ssize_t n = recv(tcp_socket, rx_buf, sizeof(rx_buf), 0);
+        ssize_t n = recv(tcp_socket, (char *)rx_buf, sizeof(rx_buf), 0);
         if (n == 0)
         {
             printf("Server disconnected\n");
@@ -124,7 +127,7 @@ int main(int argc, char *argv[])
         }
         if (n < 0)
         {
-            if (errno == EINTR)
+            if (sock_errno() == SOCK_EINTR)
                 continue;
             perror("recv failed");
             break;
@@ -158,7 +161,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    close(tcp_socket);
+    SOCK_CLOSE(tcp_socket);
     printf("broadcast_diag_rx terminated\n");
     return EXIT_SUCCESS;
 }

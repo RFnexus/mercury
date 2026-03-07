@@ -35,7 +35,10 @@
 #define NET_H__
 
 #include <stdint.h>
+#include <sys/types.h>
+#if !defined(_WIN32)
 #include <unistd.h>
+#endif
 
 #define CTL_TCP_PORT 0
 #define DATA_TCP_PORT 1

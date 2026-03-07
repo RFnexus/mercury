@@ -247,7 +247,7 @@ int arithmetic_decode(uint8_t* input, int max_len, char* output, int max_output)
         while (!(scaled >= cum_freq[sym] && scaled < cum_freq[sym + 1])) {
             sym++;
             if (sym >= NUM_SYMBOLS) {
-                fprintf(stderr, "Decode error: no matching symbol for scaled=%lu\n", scaled);
+                fprintf(stderr, "Decode error: no matching symbol for scaled=%llu\n", (unsigned long long)scaled);
                 return -1;
             }
         }
@@ -317,7 +317,7 @@ int arithmetic_decode(uint8_t* input, int max_len, char* output) {
         while (!(scaled >= cum_freq[sym] && scaled < cum_freq[sym + 1])) {
             sym++;
             if (sym >= NUM_SYMBOLS) {
-                fprintf(stderr, "Decode error: no matching symbol for scaled=%lu\n", scaled);
+                fprintf(stderr, "Decode error: no matching symbol for scaled=%llu\n", (unsigned long long)scaled);
                 return -1;
             }
         }

@@ -9,17 +9,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <pthread.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/types.h>
+#if !defined(_WIN32)
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#endif
 
+#include "../common/os_interop.h"
 #include "kiss.h"
 
 #define BUFFER_SIZE 8192
@@ -42,14 +45,14 @@ int create_tcp_socket(const char *ip, int port)
     if (inet_pton(AF_INET, ip, &modem_addr.sin_addr) <= 0)
     {
         perror("Invalid modem IP address");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return -1;
     }
 
     if (connect(tcp_socket, (struct sockaddr *)&modem_addr, sizeof(modem_addr)) < 0)
     {
         perror("Failed to connect to modem");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return -1;
     }
 
@@ -180,7 +183,7 @@ int main(int argc, char *argv[])
     pthread_cancel(recv_tid); // Cancel the receive thread
     pthread_join(recv_tid, NULL);
 
-    close(tcp_socket);
+    SOCK_CLOSE(tcp_socket);
     printf("TCP client terminated.\n");
     return EXIT_SUCCESS;
 }

@@ -6,7 +6,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -14,10 +13,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/types.h>
+#if !defined(_WIN32)
+#include <arpa/inet.h>
+#include <sys/socket.h>
 #include <unistd.h>
+#endif
 
+#include "../common/os_interop.h"
 #include "crc6.h"
 #include "kiss.h"
 
@@ -57,14 +60,14 @@ static int create_tcp_socket(const char *ip, int port)
     if (inet_pton(AF_INET, ip, &modem_addr.sin_addr) <= 0)
     {
         perror("Invalid modem IP address");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return -1;
     }
 
     if (connect(tcp_socket, (struct sockaddr *)&modem_addr, sizeof(modem_addr)) < 0)
     {
         perror("Failed to connect to modem");
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return -1;
     }
 
@@ -76,7 +79,7 @@ static int send_all(int socket_fd, const uint8_t *buffer, size_t len)
     size_t sent_total = 0;
     while (sent_total < len)
     {
-        ssize_t sent = send(socket_fd, buffer + sent_total, len - sent_total, DIAG_SEND_FLAGS);
+        ssize_t sent = send(socket_fd, (const char *)(buffer + sent_total), len - sent_total, DIAG_SEND_FLAGS);
         if (sent <= 0)
         {
             return -1;
@@ -170,7 +173,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "allocation failed\n");
         free(frame);
         free(kiss_frame);
-        close(tcp_socket);
+        SOCK_CLOSE(tcp_socket);
         return EXIT_FAILURE;
     }
 
@@ -196,12 +199,16 @@ int main(int argc, char *argv[])
         }
 
         seq++;
+#if defined(_WIN32)
+        Sleep((DWORD)interval_ms);
+#else
         usleep((useconds_t)interval_ms * 1000);
+#endif
     }
 
     free(frame);
     free(kiss_frame);
-    close(tcp_socket);
+    SOCK_CLOSE(tcp_socket);
     printf("broadcast_diag_tx terminated\n");
     return EXIT_SUCCESS;
 }
