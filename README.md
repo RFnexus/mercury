@@ -65,6 +65,28 @@ Mode behavior notes:
 - During an active ARQ link, control frames use DATAC13 and ARQ payload starts in DATAC4 (then may adapt to DATAC3/DATAC1).
 - `FSK_LDPC` is currently **experimental** (mainly for lab/test usage), may have longer decode/sync latency depending on setup, and is not recommended for production links yet.
 
+## Getting Mercury
+
+### Pre-built Binaries
+
+**Windows:** Ready-to-run executables are available on the [GitHub Releases page](https://github.com/Rhizomatica/mercury/releases).
+
+**Debian / Raspberry Pi OS:** A package repository is available for amd64 and arm64 (Debian 13 Trixie / Raspberry Pi OS). To install:
+
+```
+# Install the repository certificate
+wget --no-check-certificate -qO- https://debian.hermes.radio/hermes/hermes.key | gpg --dearmor -o - | sudo tee /etc/apt/trusted.gpg.d/hermes.gpg > /dev/null
+
+# For arm64 (Raspberry Pi, sBitx radio, etc.)
+echo 'deb [arch=arm64] http://debian.hermes.radio/hermes trixie main' | sudo tee -a /etc/apt/sources.list.d/hermes.list
+
+# For amd64 (laptop, desktop, etc.)
+echo 'deb [arch=amd64] http://debian.hermes.radio/hermes trixie main' | sudo tee -a /etc/apt/sources.list.d/hermes.list
+
+sudo apt update
+sudo apt install mercury
+```
+
 ## Compilation
 
 Edit config.mk with your C compiler and appropriate flags (defaults should be fine for most) and type:
