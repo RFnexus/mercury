@@ -128,10 +128,25 @@ void *radio_playback_thread(void *device_ptr)
     // Resampling ratio: 8kHz -> 48kHz = 1:6
     const int resample_ratio = 6;
 
-    if ( audio->init(&aconf) != 0)
+    /* PulseAudio uses a single global context (gconn in pulse.c).
+     * If init() returns "already initialized" it means the capture thread
+     * already called init() successfully and we can proceed normally.
+     * Track whether we initialized so we only uninit once.
+     */
+    bool did_init_play = false;
+    r = audio->init(&aconf);
+    if (r != 0)
     {
-        printf("Error in audio->init()\n");
-        goto finish_play;
+        if (aconf.error == NULL || strcmp(aconf.error, "already initialized") != 0)
+        {
+            printf("Error in audio->init(): %s\n", aconf.error ? aconf.error : "unknown");
+            goto finish_play;
+        }
+        // "already initialized" is fine - another thread owns the context
+    }
+    else
+    {
+        did_init_play = true;
     }
 
     // playback code...
@@ -275,7 +290,9 @@ cleanup_play:
 
     audio->free(b);
 
-    audio->uninit();
+    // Only uninit if this thread was the one that initialized the PA context
+    if (did_init_play)
+        audio->uninit();
 
 finish_play:
 
@@ -344,10 +361,25 @@ void *radio_capture_thread(void *device_ptr)
     // Resampling ratio: 48kHz -> 8kHz = 6:1
     const int resample_ratio = 6;
 
-    if ( audio->init(&aconf) != 0)
+    /* PulseAudio uses a single global context (gconn in pulse.c).
+     * If init() returns "already initialized" it means the playback thread
+     * already called init() successfully and we can proceed normally.
+     * Track whether we initialized so we only uninit once.
+     */
+    bool did_init_cap = false;
+    r = audio->init(&aconf);
+    if (r != 0)
     {
-        printf("Error in audio->init()\n");
-        goto finish_cap;
+        if (aconf.error == NULL || strcmp(aconf.error, "already initialized") != 0)
+        {
+            printf("Error in audio->init(): %s\n", aconf.error ? aconf.error : "unknown");
+            goto finish_cap;
+        }
+        // "already initialized" is fine - another thread owns the context
+    }
+    else
+    {
+        did_init_cap = true;
     }
 
     // capture code
@@ -425,7 +457,8 @@ void *radio_capture_thread(void *device_ptr)
             }
 
             // Take every 6th sample (when remainder == 0)
-            if (resample_remainder == 0)
+            // Bounds check: ensure we don't overflow buffer_downsampled
+            if (resample_remainder == 0 && downsampled_frames < (int)SIGNAL_BUFFER_SIZE)
             {
                 buffer_downsampled[downsampled_frames++] = sample;
             }
@@ -433,10 +466,13 @@ void *radio_capture_thread(void *device_ptr)
             resample_remainder = (resample_remainder + 1) % resample_ratio;
         }
 
-        if (circular_buf_free_size(capture_buffer) >= (size_t)(downsampled_frames * sizeof(int32_t)))
-            write_buffer(capture_buffer, (uint8_t *)buffer_downsampled, downsampled_frames * sizeof(int32_t));
-        else
-            printf("Buffer full in capture buffer!\n");
+        if (downsampled_frames > 0)
+        {
+            if (circular_buf_free_size(capture_buffer) >= (size_t)(downsampled_frames * sizeof(int32_t)))
+                write_buffer(capture_buffer, (uint8_t *)buffer_downsampled, downsampled_frames * sizeof(int32_t));
+            else
+                printf("Buffer full in capture buffer!\n");
+        }
     }
 
     r = audio->stop(b);
@@ -454,7 +490,9 @@ cleanup_cap:
 
     audio->free(b);
 
-    audio->uninit();
+    // Only uninit if this thread was the one that initialized the PA context
+    if (did_init_cap)
+        audio->uninit();
 
 finish_cap:
     printf("radio_capture_thread exit\n");
@@ -594,6 +632,25 @@ int audioio_init_internal(char *capture_dev, char *playback_dev, int audio_subsy
 
     clear_buffer(capture_buffer);
     clear_buffer(playback_buffer);
+
+    /* Pre-initialize PulseAudio once here in the main thread before spawning
+     * capture/playback threads. ffpulse_init() uses a single global context
+     * (gconn) and returns an error if called more than once. By initializing
+     * here, both threads will see "already initialized" and proceed normally
+     * rather than one of them failing and exiting early.
+     */
+#if defined(__linux__)
+    if (audio_subsystem == AUDIO_SUBSYSTEM_PULSE)
+    {
+        ffaudio_interface *audio = (ffaudio_interface *) &ffpulse;
+        ffaudio_init_conf aconf = {};
+        aconf.app_name = "mercury";
+        if (audio->init(&aconf) != 0)
+        {
+            printf("Error pre-initializing PulseAudio: %s\n", aconf.error ? aconf.error : "unknown");
+        }
+    }
+#endif
 
     pthread_create(radio_capture, NULL, radio_capture_thread, (void *) capture_dev);
     pthread_create(radio_playback, NULL, radio_playback_thread, (void *) playback_dev);
