@@ -512,8 +512,14 @@ int shutdown_modem(generic_modem_t *g_modem)
     pthread_join(tx_thread_tid, NULL);
     pthread_join(rx_thread_tid, NULL);
     
-    circular_buf_disconnect_shm(capture_buffer, SIGNAL_BUFFER_SIZE);
-    circular_buf_disconnect_shm(playback_buffer, SIGNAL_BUFFER_SIZE);
+    if (capture_buffer) {
+	    circular_buf_disconnect_shm(capture_buffer, SIGNAL_BUFFER_SIZE);
+	    circular_buf_free_shm(capture_buffer);
+    }
+    if (playback_buffer) {
+	    circular_buf_disconnect_shm(playback_buffer, SIGNAL_BUFFER_SIZE);
+	    circular_buf_free_shm(playback_buffer);
+    }
     circular_buf_free_shm(capture_buffer);
     circular_buf_free_shm(playback_buffer);
 
