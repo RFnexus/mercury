@@ -205,6 +205,18 @@ BITRATE\r
 
 ---
 
+### RETRIES
+
+Override the amount of retries Mercury will try to connect or retry a transmission before giving up.
+Setting to 0 should revert to the defined values in datalink_arq/arq_protocol.h.
+
+```
+RETRIES 10\r
+```
+
+---
+
+
 ## Asynchronous Responses (Mercury → Client)
 
 These are sent on the **control port** without a preceding command.

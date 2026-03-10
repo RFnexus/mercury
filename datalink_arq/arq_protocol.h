@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 /* ======================================================================
  * Protocol version (informational — not carried in wire frames)
@@ -173,10 +174,22 @@ typedef struct
                                             * and raced with TIMER_RETRY, causing
                                             * 3-4 wasted ACCEPT retries (~28s).    */
 #define ARQ_ACK_GUARD_S               1     /* extra slack added to retry interval */
-#define ARQ_CALL_RETRY_SLOTS          4     /* CALL retries before giving up       */
-#define ARQ_ACCEPT_RETRY_SLOTS        4     /* ACCEPT retries before returning     */
-#define ARQ_DATA_RETRY_SLOTS          10    /* DATA retries before disconnect      */
-#define ARQ_DISCONNECT_RETRY_SLOTS    2     /* DISCONNECT frame retries            */
+#define ARQ_CALL_RETRY_SLOTS_DEFAULT       4    /* CALL retries before giving up       */
+#define ARQ_ACCEPT_RETRY_SLOTS_DEFAULT     4    /* ACCEPT retries before returning     */
+#define ARQ_DATA_RETRY_SLOTS_DEFAULT      10    /* DATA retries before disconnect      */
+#define ARQ_DISCONNECT_RETRY_SLOTS_DEFAULT 2    /* DISCONNECT frame retries            */
+
+/* Runtime-configurable retry counts (set via RETRIES TCP command).
+ * Macros below preserve existing FSM code unchanged. */
+extern _Atomic int arq_call_retry_slots;
+extern _Atomic int arq_accept_retry_slots;
+extern _Atomic int arq_data_retry_slots;
+extern _Atomic int arq_disconnect_retry_slots;
+
+#define ARQ_CALL_RETRY_SLOTS       atomic_load(&arq_call_retry_slots)
+#define ARQ_ACCEPT_RETRY_SLOTS     atomic_load(&arq_accept_retry_slots)
+#define ARQ_DATA_RETRY_SLOTS       atomic_load(&arq_data_retry_slots)
+#define ARQ_DISCONNECT_RETRY_SLOTS atomic_load(&arq_disconnect_retry_slots)
 #define ARQ_CONNECT_GRACE_SLOTS       2     /* extra wait slots for ACCEPT         */
 #define ARQ_CONNECT_BUSY_EXT_S        2     /* busy-extension guard after CALL     */
 #define ARQ_KEEPALIVE_INTERVAL_S      20    /* keepalive TX interval               */
