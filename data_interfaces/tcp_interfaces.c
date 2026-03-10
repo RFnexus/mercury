@@ -936,7 +936,8 @@ void ptt_off()
 void tnc_send_connected()
 {
     char buffer[128];
-    sprintf(buffer, "CONNECTED %s %s %d\r", arq_conn.my_call_sign, arq_conn.dst_addr, 2300);
+    sprintf(buffer, "CONNECTED %s %s %d\r",
+            arq_conn.my_call_sign, arq_conn.dst_addr, arq_effective_bandwidth_hz());
     if (tnc_queue_line(buffer) < 0)
         HLOGW("tcp-ctl", "Error queuing connected message");
 }
