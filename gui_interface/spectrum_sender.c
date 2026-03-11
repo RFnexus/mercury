@@ -96,7 +96,7 @@ int spectrum_tx_send(spectrum_tx_t *stx,
     /* Payload: float32 array (platform native == little-endian on x86/ARM) */
     memcpy(buf + hdr_sz, mag_spec_dB, data_sz);
 
-    ssize_t sent = sendto(stx->sock, buf, pkt_sz, 0,
+    ssize_t sent = sendto(stx->sock, (const char *)buf, pkt_sz, 0,
                           (struct sockaddr *)&stx->dest,
                           sizeof(stx->dest));
     free(buf);
