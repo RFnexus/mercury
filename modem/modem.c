@@ -65,6 +65,7 @@ pthread_t tx_thread_tid, rx_thread_tid;
 static pthread_mutex_t modem_freedv_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t modem_freedv_epoch = 1;
 static uint64_t modem_last_switch_ms = 0;
+static bool modem_owns_radio_buffers = false;
 
 /* --- Spectrum data for UI waterfall display --- */
 #include "freedv/modem_stats.h"
@@ -334,6 +335,7 @@ try_shm_connect2:
 
     if (shm_connected)
         printf("Connected to Shared Memory Radio I/O tx/rx buffers.\n");
+    modem_owns_radio_buffers = shm_connected;
 
     // buffers for the ARQ datalink
     uint8_t *buffer_tx = (uint8_t *) malloc(DATA_TX_BUFFER_SIZE);
@@ -521,16 +523,20 @@ int shutdown_modem(generic_modem_t *g_modem)
     pthread_join(tx_thread_tid, NULL);
     pthread_join(rx_thread_tid, NULL);
     
-    if (capture_buffer) {
-	    circular_buf_disconnect_shm(capture_buffer, SIGNAL_BUFFER_SIZE);
-	    circular_buf_free_shm(capture_buffer);
+    if (modem_owns_radio_buffers)
+    {
+        if (capture_buffer) {
+            circular_buf_disconnect_shm(capture_buffer, SIGNAL_BUFFER_SIZE);
+            circular_buf_free_shm(capture_buffer);
+            capture_buffer = NULL;
+        }
+        if (playback_buffer) {
+            circular_buf_disconnect_shm(playback_buffer, SIGNAL_BUFFER_SIZE);
+            circular_buf_free_shm(playback_buffer);
+            playback_buffer = NULL;
+        }
+        modem_owns_radio_buffers = false;
     }
-    if (playback_buffer) {
-	    circular_buf_disconnect_shm(playback_buffer, SIGNAL_BUFFER_SIZE);
-	    circular_buf_free_shm(playback_buffer);
-    }
-    circular_buf_free_shm(capture_buffer);
-    circular_buf_free_shm(playback_buffer);
 
     free(data_tx_buffer_arq->buffer);
     free(data_tx_buffer_arq_control->buffer);

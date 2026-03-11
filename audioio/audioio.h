@@ -39,6 +39,7 @@ int audioio_init_internal(char *capture_dev, char *playback_dev, int audio_subsy
 						  pthread_t *radio_playback);
 
 int audioio_deinit(pthread_t *radio_capture, pthread_t *radio_playback);
+int audioio_pick_default_subsystem(void);
 
 int tx_transfer(double *buffer, size_t len);
 int rx_transfer(double *buffer, size_t len);

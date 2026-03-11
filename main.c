@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
 
 #ifdef __linux__
 #include <sched.h>
@@ -70,6 +71,13 @@ char *freedv_mode_names[] = { "DATAC1",
                               "FSK_LDPC" };
 
 bool shutdown_ = false; // global shutdown flag
+static volatile sig_atomic_t exit_requested_ = 0;
+
+static void handle_termination_signal(int sig)
+{
+    (void)sig;
+    exit_requested_ = 1;
+}
 
 static int parse_rx_channel_layout(const char *value)
 {
@@ -382,6 +390,9 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
+    signal(SIGINT, handle_termination_signal);
+    signal(SIGTERM, handle_termination_signal);
+
 
     if (cpu_nr != -1)
     {
@@ -399,11 +410,7 @@ int main(int argc, char *argv[])
     // set some defaults... in case the user did not select
     if (audio_system == -1)
     {
-#if defined(__linux__)
-        audio_system = AUDIO_SUBSYSTEM_ALSA;
-#elif defined(_WIN32)
-        audio_system = AUDIO_SUBSYSTEM_DSOUND;
-#endif
+        audio_system = audioio_pick_default_subsystem();
     }
 
     printf("Audio System: ");
@@ -570,7 +577,11 @@ int main(int argc, char *argv[])
         HLOGI("main", "UI communication disabled (use -G to enable).");
     }
 
-    // we block somewhere here until shutdown
+    while (!shutdown_ && !exit_requested_)
+        msleep(100);
+
+    shutdown_ = true;
+
     if (audio_system != AUDIO_SUBSYSTEM_SHM)
     {
         audioio_deinit(&radio_capture, &radio_playback);

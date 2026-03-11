@@ -58,6 +58,23 @@ static inline void ffthread_sleep(ffuint msec)
 #endif
 }
 
+int audioio_pick_default_subsystem(void)
+{
+#if defined(__linux__)
+    return AUDIO_SUBSYSTEM_ALSA;
+#elif defined(_WIN32)
+    return AUDIO_SUBSYSTEM_DSOUND;
+#elif defined(__FREEBSD__)
+    return AUDIO_SUBSYSTEM_OSS;
+#elif defined(__APPLE__)
+    return AUDIO_SUBSYSTEM_COREAUDIO;
+#elif defined(__ANDROID__)
+    return AUDIO_SUBSYSTEM_AAUDIO;
+#else
+    return AUDIO_SUBSYSTEM_ALSA;
+#endif
+}
+
 
 void *radio_playback_thread(void *device_ptr)
 {
