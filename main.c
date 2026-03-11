@@ -78,6 +78,7 @@ static void handle_termination_signal(int sig)
     shutdown_ = true;
     HLOGI("main", "Termination signal received, shutting down...");
     msleep(1500); // give some time for the main loop to exit and for the modem and interfaces to shutdown gracefully
+    exit(0); // in case the main loop is stuck for some reason, we force exit after a delay
 }
 
 static int parse_rx_channel_layout(const char *value)
