@@ -577,7 +577,7 @@ int main(int argc, char *argv[])
     }
 
     while (!shutdown_)
-        msleep(100);
+        msleep(500);
 
     if (audio_system != AUDIO_SUBSYSTEM_SHM)
     {
@@ -586,7 +586,12 @@ int main(int argc, char *argv[])
     
     if (ui_enabled)
         ui_comm_shutdown(&ui_ctx);
-    radio_io_shutdown();
+
+    if (radio_type != RADIO_TYPE_NONE)
+    {
+        radio_io_shutdown();
+    }
+
     shutdown_modem(&g_modem);
     HLOGI("main", "Shutting down");
     hermes_log_shutdown();
