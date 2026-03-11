@@ -1241,6 +1241,7 @@ void *rx_thread(void *g_modem)
     int last_pref_rx_mode = -1;
     int last_pref_tx_mode = -1;
     bool was_tx = false;
+    uint64_t spectrum_next_ms = 0; /* throttle FFT to ~20 fps */
 
     while (!shutdown_)
     {
@@ -1374,36 +1375,43 @@ void *rx_thread(void *g_modem)
         }
 
         /* --- Update spectrum buffer for UI waterfall display --- */
+        /* Throttle FFT to match the 50 ms publish interval (~20 fps) */
         {
-            /* Convert i16 samples to COMP for modem_stats_get_rx_spectrum */
-            int spec_nin = chunk_samples;
-            if (spec_nin > MODEM_STATS_NSPEC)
-                spec_nin = MODEM_STATS_NSPEC;
-            COMP rx_fdm[MODEM_STATS_NSPEC];
-            for (int i = 0; i < spec_nin; i++)
+            uint64_t now_ms = monotonic_ms();
+            if (now_ms >= spectrum_next_ms)
             {
-                /* Pass raw i16 amplitude — modem_stats_get_rx_spectrum normalises
-                 * against FDMDV_SCALE=825, not against 32768.  Dividing by 32768
-                 * shifts the entire spectrum down by ~90 dB */
-                rx_fdm[i].real = (float)capture_i16[i];
-                rx_fdm[i].imag = 0.0f;
-            }
+                spectrum_next_ms = now_ms + 50;
 
-            pthread_mutex_lock(&g_spectrum_lock);
-            if (!g_spectrum_stats_inited)
-            {
-                modem_stats_open(&g_spectrum_stats);
-                g_spectrum_stats_inited = true;
+                /* Convert i16 samples to COMP for modem_stats_get_rx_spectrum */
+                int spec_nin = chunk_samples;
+                if (spec_nin > MODEM_STATS_NSPEC)
+                    spec_nin = MODEM_STATS_NSPEC;
+                COMP rx_fdm[MODEM_STATS_NSPEC];
+                for (int i = 0; i < spec_nin; i++)
+                {
+                    /* Pass raw i16 amplitude — modem_stats_get_rx_spectrum normalises
+                     * against FDMDV_SCALE=825, not against 32768.  Dividing by 32768
+                     * shifts the entire spectrum down by ~90 dB */
+                    rx_fdm[i].real = (float)capture_i16[i];
+                    rx_fdm[i].imag = 0.0f;
+                }
+
+                pthread_mutex_lock(&g_spectrum_lock);
+                if (!g_spectrum_stats_inited)
+                {
+                    modem_stats_open(&g_spectrum_stats);
+                    g_spectrum_stats_inited = true;
+                }
+                modem_stats_get_rx_spectrum(&g_spectrum_stats, g_rx_spectrum_dB,
+                                            rx_fdm, spec_nin);
+                g_spectrum_valid = true;
+                /* Determine sample rate from the modem */
+                pthread_mutex_lock(&modem_freedv_lock);
+                if (modem->freedv)
+                    g_spectrum_sample_rate = freedv_get_modem_sample_rate(modem->freedv);
+                pthread_mutex_unlock(&modem_freedv_lock);
+                pthread_mutex_unlock(&g_spectrum_lock);
             }
-            modem_stats_get_rx_spectrum(&g_spectrum_stats, g_rx_spectrum_dB,
-                                        rx_fdm, spec_nin);
-            g_spectrum_valid = true;
-            /* Determine sample rate from the modem */
-            pthread_mutex_lock(&modem_freedv_lock);
-            if (modem->freedv)
-                g_spectrum_sample_rate = freedv_get_modem_sample_rate(modem->freedv);
-            pthread_mutex_unlock(&modem_freedv_lock);
-            pthread_mutex_unlock(&g_spectrum_lock);
         }
     }
 
