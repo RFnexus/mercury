@@ -60,7 +60,7 @@
 #include "../modem/modem.h"
 
 // global shutdown flag from main.c
-extern bool shutdown_;
+extern volatile bool shutdown_;
 #else
 // Standalone test mode: provide a local shutdown flag
 static bool shutdown_ = false;

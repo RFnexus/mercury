@@ -35,7 +35,7 @@
 #include "ring_buffer_posix.h"
 #include "tcp_interfaces.h"
 
-extern bool shutdown_; // global shutdown flag
+extern volatile bool shutdown_; // global shutdown flag
 extern arq_info arq_conn; // ARQ connection info
 
 static const uint32_t hermes_broadcast_frame_size[7] = { 510, 126, 14, 54, 14, 3, 30 };

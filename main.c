@@ -70,13 +70,12 @@ char *freedv_mode_names[] = { "DATAC1",
                               "DATAC14",
                               "FSK_LDPC" };
 
-bool shutdown_ = false; // global shutdown flag
-static volatile sig_atomic_t exit_requested_ = 0;
+volatile bool shutdown_ = false; // global shutdown flag
 
 static void handle_termination_signal(int sig)
 {
     (void)sig;
-    exit_requested_ = 1;
+    shutdown_ = true;
 }
 
 static int parse_rx_channel_layout(const char *value)
@@ -577,10 +576,8 @@ int main(int argc, char *argv[])
         HLOGI("main", "UI communication disabled (use -G to enable).");
     }
 
-    while (!shutdown_ && !exit_requested_)
+    while (!shutdown_)
         msleep(100);
-
-    shutdown_ = true;
 
     if (audio_system != AUDIO_SUBSYSTEM_SHM)
     {

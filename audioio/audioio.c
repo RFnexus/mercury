@@ -24,8 +24,7 @@
 
 #include "audioio.h"
 
-// bool shutdown_;
-extern bool shutdown_;
+extern volatile bool shutdown_;
 
 cbuf_handle_t capture_buffer;
 cbuf_handle_t playback_buffer;

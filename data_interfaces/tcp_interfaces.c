@@ -76,7 +76,7 @@ extern cbuf_handle_t data_rx_buffer_arq;
 extern cbuf_handle_t data_tx_buffer_broadcast;
 extern cbuf_handle_t data_rx_buffer_broadcast;
 
-extern bool shutdown_;
+extern volatile bool shutdown_;
 
 extern arq_info arq_conn;
 

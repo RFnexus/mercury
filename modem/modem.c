@@ -47,7 +47,7 @@
 /* The buffers can be connected to an external software (eg. sbitx_controller)  */
 /* or to the audioio subsystem which connects to a sound card. */
 
-extern bool shutdown_; // global shutdown flag
+extern volatile bool shutdown_; // global shutdown flag
 
 extern cbuf_handle_t capture_buffer;
 extern cbuf_handle_t playback_buffer;
