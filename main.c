@@ -76,6 +76,8 @@ static void handle_termination_signal(int sig)
 {
     (void)sig;
     shutdown_ = true;
+    HLOGI("main", "Termination signal received, shutting down...");
+    msleep(1500); // give some time for the main loop to exit and for the modem and interfaces to shutdown gracefully
 }
 
 static int parse_rx_channel_layout(const char *value)
