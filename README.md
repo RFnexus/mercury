@@ -36,8 +36,8 @@ over HF radio links in rural and emergency scenarios.
 - **Direct radio control** via HAMLIB or HERMES shared-memory interface for direct PTT keying.
 
 ```
-Usage modes: 
-./mercury -m [mode_index] -i [device] -o [device] -x [sound_system] -p [arq_tcp_base_port] -b [broadcast_tcp_port] -f [freedv_verbosity] -k [rx_input_channel]
+Usage modes:
+./mercury -m [mode_index] -i [device] -o [device] -x [sound_system] -p [arq_tcp_base_port] -b [broadcast_tcp_port] -f [freedv_verbosity] -k [rx_input_channel] [-G] [-u ui_ip] [-U ui_base_port] [-W]
 ./mercury [-h -l -z]
 
 Options:
@@ -51,6 +51,10 @@ Options:
  -x [sound_system]          Sets the sound system or IO API to use: alsa, pulse, dsound, wasapi or shm. Default is alsa on Linux and dsound on Windows.
  -p [arq_tcp_base_port]     Sets the ARQ TCP base port (control is base_port, data is base_port + 1). Default is 8300.
  -b [broadcast_tcp_port]    Sets the broadcast TCP port. Default is 8100.
+ -G                         Enable UI communication (UDP status/spectrum/command sockets for mercury-qt). Off by default.
+ -u [ui_ip]                 Sets the UI IP address. Default is 127.0.0.1. Requires -G.
+ -U [ui_base_port]          Sets the UI base port (TX is base_port, RX is base_port + 1, spectrum is base_port + 2). Default is 10000. Requires -G.
+ -W                         Disable waterfall/spectrum data sent to the UI (saves CPU). Requires -G.
  -l                         Lists all modulator/coding modes.
  -z                         Lists all available sound cards.
  -v                         Verbose mode. Prints more information during execution.

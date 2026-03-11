@@ -87,7 +87,7 @@ static int parse_rx_channel_layout(const char *value)
 static void print_usage(const char *prog)
 {
     printf("Usage modes: \n");
-    printf("%s -m [mode_index] -i [device] -o [device] -x [sound_system] -p [arq_tcp_base_port] -b [broadcast_tcp_port] -f [freedv_verbosity] -k [rx_input_channel] -u [ui_ip] -U [ui_base_port] [-W]\n", prog);
+    printf("%s -m [mode_index] -i [device] -o [device] -x [sound_system] -p [arq_tcp_base_port] -b [broadcast_tcp_port] -f [freedv_verbosity] -k [rx_input_channel] [-G] [-u ui_ip] [-U ui_base_port] [-W]\n", prog);
     printf("%s [-h -l -z]\n", prog);
     printf("\nOptions:\n");
     printf(" -c [cpu_nr]                Run on CPU [cpu_nr]. Use -1 to disable CPU selection, which is the default.\n");
@@ -103,6 +103,7 @@ static void print_usage(const char *prog)
     printf(" -u [ui_ip]                 Sets the UI IP address. Default is 127.0.0.1.\n");
     printf(" -U [ui_base_port]          Sets the UI base port (UI TX port is ui_base_port, UI RX port is ui_base_port + 1, UI spectrum port is ui_base_port + 2). Default is 10000.\n");
     printf(" -W                         Disable waterfall/spectrum data sent to the UI (used to spare CPU).\n");
+    printf(" -G                         Enable UI communication (UDP status/spectrum/command sockets for mercury-qt). Off by default.\n");
     printf(" -l                         Lists all modulator/coding modes.\n");
     printf(" -z                         Lists all available sound cards.\n");
     printf(" -v                         Verbose mode. Prints more information during execution.\n");
@@ -152,6 +153,7 @@ int main(int argc, char *argv[])
     const char *ui_ip = UI_DEFAULT_IP;
     int ui_tx_port = UI_BASE_PORT;
     bool waterfall_enabled = true;
+    bool ui_enabled = false;
     int startup_payload_mode = FREEDV_MODE_DATAC3;
     int freedv_verbosity = 0;
     int rx_input_channel = LEFT;
@@ -166,7 +168,7 @@ int main(int argc, char *argv[])
     bool list_radio_models = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "hc:s:m:f:k:li:o:x:p:b:zvtrL:JR:u:U:A:SKW")) != -1)
+    while ((opt = getopt(argc, argv, "hc:s:m:f:k:li:o:x:p:b:zvtrL:JR:u:U:A:SKWG")) != -1)
     {
         switch (opt)
         {
@@ -182,6 +184,9 @@ int main(int argc, char *argv[])
             break;
         case 'W':
             waterfall_enabled = false;
+            break;
+        case 'G':
+            ui_enabled = true;
             break;
 	case 't':
             test_mode = 1;
@@ -549,12 +554,20 @@ int main(int argc, char *argv[])
 
     // ---- Initialize UI communication (UDP JSON to mercury-qt) ----
     ui_ctx_t ui_ctx;
-    printf("Initializing UI communication (TX %s:%d | Waterfall %s)\n",
-           ui_ip, ui_tx_port, waterfall_enabled ? "enabled" : "disabled");
-    if (ui_comm_init(&ui_ctx, ui_ip, (uint16_t)ui_tx_port, waterfall_enabled ? 1 : 0) != 0)
+    if (ui_enabled)
     {
-        // Non-fatal: mercury can run without UI
-        HLOGW("main", "UI communication init failed. Running without GUI.\n");
+        printf("Initializing UI communication (TX %s:%d | Waterfall %s)\n",
+               ui_ip, ui_tx_port, waterfall_enabled ? "enabled" : "disabled");
+        if (ui_comm_init(&ui_ctx, ui_ip, (uint16_t)ui_tx_port, waterfall_enabled ? 1 : 0) != 0)
+        {
+            // Non-fatal: mercury can run without UI
+            HLOGW("main", "UI communication init failed. Running without GUI.\n");
+        }
+    }
+    else
+    {
+        memset(&ui_ctx, 0, sizeof(ui_ctx));
+        HLOGI("main", "UI communication disabled (use -G to enable).");
     }
 
     // we block somewhere here until shutdown
@@ -563,7 +576,8 @@ int main(int argc, char *argv[])
         audioio_deinit(&radio_capture, &radio_playback);
     }
     
-    ui_comm_shutdown(&ui_ctx);
+    if (ui_enabled)
+        ui_comm_shutdown(&ui_ctx);
     radio_io_shutdown();
     shutdown_modem(&g_modem);
     HLOGI("main", "Shutting down");
