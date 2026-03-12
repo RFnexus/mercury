@@ -50,6 +50,8 @@ extern cbuf_handle_t data_tx_buffer_arq;
 extern cbuf_handle_t data_tx_buffer_arq_control;
 extern cbuf_handle_t data_rx_buffer_arq;
 
+extern void tnc_send_pending(void);
+extern void tnc_send_cancelpending(void);
 extern void tnc_send_connected(void);
 extern void tnc_send_disconnected(void);
 extern void tnc_send_buffer(uint32_t bytes);
@@ -159,7 +161,11 @@ static void cb_send_tx_frame(int packet_type, int mode,
 
 static void cb_notify_connected(const char *remote_call)
 {
-    snprintf(arq_conn.dst_addr, CALLSIGN_MAX_SIZE, "%s", remote_call);
+    if (arq_conn.src_addr[0] == '\0')
+    {
+        snprintf(arq_conn.src_addr, CALLSIGN_MAX_SIZE, "%s", remote_call);
+        snprintf(arq_conn.dst_addr, CALLSIGN_MAX_SIZE, "%s", arq_conn.my_call_sign);
+    }
     arq_conn.TRX = RX;
     /* Flush any stale RX bytes from the previous session before notifying
      * UUCP.  Moved here from cb_notify_disconnected so that the last bytes
@@ -170,10 +176,23 @@ static void cb_notify_connected(const char *remote_call)
     HLOGI(LOG_COMP, "Connected to %s", remote_call);
 }
 
+static void cb_notify_pending(const char *remote_call)
+{
+    tnc_send_pending();
+    HLOGI(LOG_COMP, "Incoming connection from %s (pending)", remote_call);
+}
+
+static void cb_notify_cancelpending(void)
+{
+    tnc_send_cancelpending();
+    HLOGI(LOG_COMP, "Incoming connection cancelled");
+}
+
 static void cb_notify_disconnected(bool to_no_client)
 {
     (void)to_no_client;
     bool was_connected = arq_conn.dst_addr[0] != '\0';
+    memset(arq_conn.src_addr, 0, sizeof(arq_conn.src_addr));
     memset(arq_conn.dst_addr, 0, sizeof(arq_conn.dst_addr));
     arq_conn.TRX = RX;
     /* Flush stale TX bytes from the previous session.  RX bytes are flushed
@@ -239,6 +258,16 @@ int arq_effective_bandwidth_hz(void)
     return ARQ_BANDWIDTH_FULL_HZ;
 }
 
+int arq_reported_bandwidth_hz(void)
+{
+    if (arq_conn.bw == ARQ_BANDWIDTH_NARROW_HZ ||
+        arq_conn.bw == ARQ_BANDWIDTH_FULL_HZ ||
+        arq_conn.bw == ARQ_BANDWIDTH_TACTICAL_HZ)
+        return arq_conn.bw;
+
+    return ARQ_BANDWIDTH_FULL_HZ;
+}
+
 bool arq_bandwidth_allows_mode(int mode)
 {
     if (mode == FREEDV_MODE_DATAC1)
@@ -282,6 +311,8 @@ static void handle_cmd(const arq_cmd_msg_t *msg)
         break;
 
     case ARQ_CMD_CONNECT:
+        snprintf(arq_conn.src_addr, CALLSIGN_MAX_SIZE, "%s", msg->arg0);
+        snprintf(arq_conn.dst_addr, CALLSIGN_MAX_SIZE, "%s", msg->arg1);
         snprintf(ev.remote_call, CALLSIGN_MAX_SIZE, "%s", msg->arg1);
         ev.id = ARQ_EV_APP_CONNECT;
         break;
@@ -573,6 +604,8 @@ int arq_init(size_t frame_size, int mode)
     static const arq_fsm_callbacks_t cbs = {
         .send_tx_frame       = cb_send_tx_frame,
         .notify_connected    = cb_notify_connected,
+        .notify_pending      = cb_notify_pending,
+        .notify_cancelpending = cb_notify_cancelpending,
         .notify_disconnected = cb_notify_disconnected,
         .deliver_rx_data     = cb_deliver_rx_data,
         .tx_backlog          = cb_tx_backlog,

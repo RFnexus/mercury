@@ -202,6 +202,9 @@ typedef struct
     bool     pending_disconnect;       /* APP_DISCONNECT deferred until TX buf empty */
 
     /* --- Initial connect guard --- */
+    bool     pending_connect_confirm;  /* caller must ACK ACCEPT when no initial
+                                        * DATA is queued, otherwise callee stays
+                                        * in ACCEPTING waiting for first traffic */
     bool     need_initial_guard;       /* ISS must apply channel guard before
                                         * first DATA after connect (prevents
                                         * transmitting before IRS resets its
@@ -247,6 +250,12 @@ typedef struct
 
     /** Notify TCP interface that a connection is established. */
     void (*notify_connected)(const char *remote_call);
+
+    /** Notify TCP interface of an incoming call that is pending acceptance. */
+    void (*notify_pending)(const char *remote_call);
+
+    /** Notify TCP interface that a pending incoming call did not complete. */
+    void (*notify_cancelpending)(void);
 
     /** Notify TCP interface of disconnection.
      *  @param to_no_client  true = client disconnected too; clear arq_conn. */

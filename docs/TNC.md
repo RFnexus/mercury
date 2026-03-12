@@ -81,7 +81,9 @@ BW2750\r
 
 - **BW2300** — Full bandwidth.  Allows gear-shifting up to DATAC1 (510 bytes/frame).
 - **BW500** — Narrow bandwidth.  Restricts the maximum payload mode to DATAC3/DATAC4.
-- **BW2750** — Accepted for compatibility, but currently behaves like **BW2300**.
+- **BW2750** — Tactical mode token accepted for VARA compatibility. Mercury
+  currently uses the same payload-mode ceiling as **BW2300**, but preserves
+  `2750` in `CONNECTED ... BW` reports.
 
 ---
 
@@ -144,8 +146,9 @@ CONNECT <mycall> <theircall>\r
 **Response:** `OK\r` if the command was accepted, `WRONG\r` on error.
 
 Mercury will transmit CALL frames on DATAC13 and wait for an ACCEPT.
-On success, the asynchronous response `CONNECTED <mycall> <theircall> <bandwidth>\r`
-is sent on the control port.
+On success, the asynchronous response
+`CONNECTED <sourcecall> <destcall> <bandwidth>\r` is sent on the control port,
+preserving the same call order as the original `CONNECT` command on both peers.
 
 Example:
 ```
@@ -223,7 +226,9 @@ These are sent on the **control port** without a preceding command.
 
 | Response                                    | Meaning                                      |
 |---------------------------------------------|----------------------------------------------|
-| `CONNECTED <mycall> <theircall> <bandwidth>\r` | ARQ session established                   |
+| `PENDING\r`                                 | Incoming connect request detected            |
+| `CANCELPENDING\r`                           | Pending incoming connect did not complete    |
+| `CONNECTED <sourcecall> <destcall> <bandwidth>\r` | ARQ session established                |
 | `DISCONNECTED\r`                            | ARQ session ended                            |
 | `PTT ON\r`                                  | Radio transmitter keyed                      |
 | `PTT OFF\r`                                 | Radio transmitter unkeyed                    |
@@ -232,11 +237,24 @@ These are sent on the **control port** without a preceding command.
 | `BITRATE (<level>) <bps> BPS\r`            | Throughput update                            |
 | `IAMALIVE\r`                                | Heartbeat (sent periodically while idle)     |
 
+### PENDING
+
+Sent when Mercury detects an incoming ARQ connect request addressed to the
+local station. This is an early warning so VARA-compatible host applications
+can suspend scanning or other idle activity while the link setup is in progress.
+
+### CANCELPENDING
+
+Sent when a previously pending incoming connect request does not complete and
+Mercury returns to the idle/listening state.
+
 ### CONNECTED
 
 Sent when a session is successfully established (either outgoing CONNECT
 or incoming CALL accepted).  The `<bandwidth>` value is the effective
-negotiated bandwidth, currently `500` or `2300`.
+configured VARA bandwidth token for this side (`500`, `2300`, or `2750`).
+`<sourcecall>` is always the station that initiated the session, and
+`<destcall>` is always the station that was called.
 
 ### DISCONNECTED
 
