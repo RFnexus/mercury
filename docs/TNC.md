@@ -83,7 +83,12 @@ BW2750\r
 - **BW500** — Narrow bandwidth.  Restricts the maximum payload mode to DATAC3/DATAC4.
 - **BW2750** — Tactical mode token accepted for VARA compatibility. Mercury
   currently uses the same payload-mode ceiling as **BW2300**, but preserves
-  `2750` in `CONNECTED ... BW` reports.
+  `2750` as a negotiated/reporting token.
+
+During connection setup, Mercury advertises the local BW token in `CALL` and
+returns the negotiated token in `ACCEPT`. If either side is `BW500`, the session
+stays at `500` on both ends. If both sides are wide, the session keeps the lower
+wide token (`2300` or `2750`) and `CONNECTED ... BW` reports that negotiated value.
 
 ---
 
@@ -145,7 +150,8 @@ CONNECT <mycall> <theircall>\r
 
 **Response:** `OK\r` if the command was accepted, `WRONG\r` on error.
 
-Mercury will transmit CALL frames on DATAC13 and wait for an ACCEPT.
+Mercury will transmit CALL frames on DATAC13, advertising the local BW token,
+and wait for an ACCEPT carrying the negotiated session BW.
 On success, the asynchronous response
 `CONNECTED <sourcecall> <destcall> <bandwidth>\r` is sent on the control port,
 preserving the same call order as the original `CONNECT` command on both peers.
@@ -154,6 +160,23 @@ Example:
 ```
 CONNECT AAAA BBBB\r
 ```
+
+---
+
+### CQFRAME
+
+Transmit a compact DATAC13 CQ frame.
+
+```
+CQFRAME <sourcecall> <bandwidth>\r
+```
+
+`<bandwidth>` must be one of `500`, `2300`, or `2750`.
+
+**Response:** `OK\r` if the command was accepted, `WRONG\r` on error.
+
+For VARA compatibility, Mercury also emits `PENDING\r` when the CQ frame
+starts transmitting and `CANCELPENDING\r` once that CQ transmission is done.
 
 ---
 
@@ -226,9 +249,10 @@ These are sent on the **control port** without a preceding command.
 
 | Response                                    | Meaning                                      |
 |---------------------------------------------|----------------------------------------------|
-| `PENDING\r`                                 | Incoming connect request detected            |
-| `CANCELPENDING\r`                           | Pending incoming connect did not complete    |
+| `PENDING\r`                                 | Incoming connect request or outgoing CQ TX started |
+| `CANCELPENDING\r`                           | Pending incoming connect cancelled or outgoing CQ TX completed |
 | `CONNECTED <sourcecall> <destcall> <bandwidth>\r` | ARQ session established                |
+| `CQFRAME <sourcecall> <bandwidth>\r`        | Compact CQ frame decoded                     |
 | `DISCONNECTED\r`                            | ARQ session ended                            |
 | `PTT ON\r`                                  | Radio transmitter keyed                      |
 | `PTT OFF\r`                                 | Radio transmitter unkeyed                    |
@@ -243,18 +267,32 @@ Sent when Mercury detects an incoming ARQ connect request addressed to the
 local station. This is an early warning so VARA-compatible host applications
 can suspend scanning or other idle activity while the link setup is in progress.
 
+Mercury also sends `PENDING\r` when an outgoing `CQFRAME` actually begins
+transmitting so VARA clients can treat CQ send as an in-progress operation.
+
 ### CANCELPENDING
 
 Sent when a previously pending incoming connect request does not complete and
 Mercury returns to the idle/listening state.
 
+Mercury also sends `CANCELPENDING\r` when an outgoing `CQFRAME` transmission
+finishes, which matches the lifecycle expected by VARA clients such as varim.
+
 ### CONNECTED
 
 Sent when a session is successfully established (either outgoing CONNECT
-or incoming CALL accepted).  The `<bandwidth>` value is the effective
-configured VARA bandwidth token for this side (`500`, `2300`, or `2750`).
-`<sourcecall>` is always the station that initiated the session, and
-`<destcall>` is always the station that was called.
+or incoming CALL accepted). The `<bandwidth>` value is the negotiated session
+BW token from the `CALL` / `ACCEPT` exchange (`500`, `2300`, or `2750`).
+If either peer is `BW500`, both sides report `500`. If both peers stay wide,
+Mercury reports the lower of the two wide tokens, preserving `2750` only when
+both sides advertised it. `<sourcecall>` is always the station that initiated
+the session, and `<destcall>` is always the station that was called.
+
+### CQFRAME
+
+Sent when Mercury decodes a compact DATAC13 CQ frame on the air.
+`<sourcecall>` is the transmitting station and `<bandwidth>` is the BW token
+advertised inside that CQ frame (`500`, `2300`, or `2750`).
 
 ### DISCONNECTED
 
