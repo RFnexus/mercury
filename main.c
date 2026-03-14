@@ -517,7 +517,7 @@ int main(int argc, char *argv[])
     
     if (audio_system != AUDIO_SUBSYSTEM_SHM)
     {
-        printf("Initializing I/O from Sound Card\n");
+        HLOGI("main", "Initializing I/O from Sound Card");
         audioio_init_internal(input_dev, output_dev, audio_system, rx_input_channel, &radio_capture, &radio_playback);
     }
 
@@ -531,7 +531,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("Initializing Modem\n");
+    HLOGI("main", "Initializing Modem");
     init_modem(&g_modem, startup_payload_mode, 1, test_mode, freedv_verbosity); // frames per burst is 1 for now
     
     if (arq_init(g_modem.payload_bytes_per_modem_frame, g_modem.mode) != EXIT_SUCCESS)
@@ -547,7 +547,7 @@ int main(int argc, char *argv[])
 
     broadcast_run(&g_modem);
 
-    printf("Initializing TCP interfaces with base port %d and broadcast port %d\n", base_tcp_port, broadcast_port);
+    HLOGI("main", "Initializing TCP interfaces with base port %d and broadcast port %d", base_tcp_port, broadcast_port);
     if (interfaces_init(base_tcp_port, broadcast_port, g_modem.payload_bytes_per_modem_frame) != EXIT_SUCCESS)
     {
         fprintf(stderr, "Failed to initialize TCP interfaces.\n");
@@ -565,7 +565,7 @@ int main(int argc, char *argv[])
     ui_ctx_t ui_ctx;
     if (ui_enabled)
     {
-        printf("Initializing UI communication (TX %s:%d | Waterfall %s)\n",
+        HLOGI("main", "Initializing UI communication (TX %s:%d | Waterfall %s)",
                ui_ip, ui_tx_port, waterfall_enabled ? "enabled" : "disabled");
         if (ui_comm_init(&ui_ctx, ui_ip, (uint16_t)ui_tx_port, waterfall_enabled ? 1 : 0) != 0)
         {

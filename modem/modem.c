@@ -314,7 +314,7 @@ try_shm_connect1:
         capture_buffer = circular_buf_connect_shm(SIGNAL_BUFFER_SIZE, SIGNAL_INPUT);
         if (capture_buffer == NULL)
         {
-            printf("Shared memory not created. Waiting for the radio daemon\n");
+            HLOGI("modem", "Shared memory not created. Waiting for the radio daemon");
             sleep(1);
             goto try_shm_connect1;
         }
@@ -327,14 +327,14 @@ try_shm_connect2:
         playback_buffer = circular_buf_connect_shm(SIGNAL_BUFFER_SIZE, SIGNAL_OUTPUT);
         if (playback_buffer == NULL)
         {
-            printf("Shared memory not created. Waiting for the radio daemon...\n");
+            HLOGI("modem", "Shared memory not created. Waiting for the radio daemon...");
             sleep(1);
             goto try_shm_connect2;
         }
     }
 
     if (shm_connected)
-        printf("Connected to Shared Memory Radio I/O tx/rx buffers.\n");
+        HLOGI("modem", "Connected to Shared Memory Radio I/O tx/rx buffers.");
     modem_owns_radio_buffers = shm_connected;
 
     // buffers for the ARQ datalink
@@ -351,13 +351,13 @@ try_shm_connect2:
     data_tx_buffer_broadcast = circular_buf_init(buffer_tx, DATA_TX_BUFFER_SIZE);
     data_rx_buffer_broadcast = circular_buf_init(buffer_rx, DATA_RX_BUFFER_SIZE);
     
-    printf("Created data buffers for ARQ and BROADCAST datalink, tx/rx paths.\n");
+    HLOGI("modem", "Created data buffers for ARQ and BROADCAST datalink, tx/rx paths.");
 
     pthread_mutex_lock(&modem_freedv_lock);
     if (init_mode_pool_locked(frames_per_burst, freedv_verbosity) < 0)
     {
         pthread_mutex_unlock(&modem_freedv_lock);
-        fprintf(stderr, "Failed to initialize persistent FreeDV pool\n");
+        HLOGE("modem", "Failed to initialize persistent FreeDV pool");
         return -1;
     }
 
@@ -369,7 +369,7 @@ try_shm_connect2:
         if (!g_modem->freedv)
         {
             pthread_mutex_unlock(&modem_freedv_lock);
-            fprintf(stderr, "Failed to open FreeDV mode %d\n", mode);
+            HLOGE("modem", "Failed to open FreeDV mode %d", mode);
             return -1;
         }
         freedv_set_frames_per_burst(g_modem->freedv, frames_per_burst);
@@ -382,16 +382,16 @@ try_shm_connect2:
     g_modem->payload_bytes_per_modem_frame = payload_bytes_per_modem_frame;
     
     int modem_sample_rate = freedv_get_modem_sample_rate(g_modem->freedv);
-    printf("Initialized persistent FreeDV mode pool (DATAC13/DATAC4/DATAC3/DATAC1), frames per burst: %d\n", frames_per_burst);
-    printf("Active FreeDV mode at startup: %d (%s), verbosity: %d\n", mode, mode_name_from_enum(mode), freedv_verbosity);
-    printf("Modem expects sample rate: %d Hz\n", modem_sample_rate);
-    printf("Modem payload bytes per frame: %zu\n", payload_bytes_per_modem_frame);
-    printf("Split control/data mode switching: ENABLED\n");
-    
+    HLOGI("modem", "Initialized persistent FreeDV mode pool (DATAC13/DATAC4/DATAC3/DATAC1), frames per burst: %d", frames_per_burst);
+    HLOGI("modem", "Active FreeDV mode at startup: %d (%s), verbosity: %d", mode, mode_name_from_enum(mode), freedv_verbosity);
+    HLOGI("modem", "Modem expects sample rate: %d Hz", modem_sample_rate);
+    HLOGI("modem", "Modem payload bytes per frame: %zu", payload_bytes_per_modem_frame);
+    HLOGI("modem", "Split control/data mode switching: ENABLED");
+
     if (modem_sample_rate != 8000)
     {
-        printf("WARNING: Modem sample rate is %d Hz, but audio I/O is configured for 8kHz!\n", modem_sample_rate);
-        printf("         You need to adjust the resampling in audioio.c or use a different mode.\n");
+        HLOGW("modem", "Modem sample rate is %d Hz, but audio I/O is configured for 8kHz!", modem_sample_rate);
+        HLOGW("modem", "You need to adjust the resampling in audioio.c or use a different mode.");
     }
 
     // test if testing is enable
@@ -753,7 +753,7 @@ int receive_modulated_data(generic_modem_t *g_modem, uint8_t *bytes_out, size_t 
     // Safety check: nin should not be larger than buffer
     if (nin > (size_t)input_size)
     {
-        fprintf(stderr, "RX error: nin=%zu exceeds input_size=%d\n", nin, input_size);
+        HLOGE("modem-rx", "RX error: nin=%zu exceeds input_size=%d", nin, input_size);
         *nbytes_out = 0;
         return -1;
     }
@@ -793,7 +793,7 @@ int receive_modulated_data(generic_modem_t *g_modem, uint8_t *bytes_out, size_t 
     if (*nbytes_out > 0)
     {
         frames_received++;
-        printf(">>> DECODED FRAME %d: %zu bytes, SNR: %.2f dB\n",
+        HLOGI("modem-rx", ">>> DECODED FRAME %d: %zu bytes, SNR: %.2f dB",
                frames_received, *nbytes_out, snr_est);
     }
 
@@ -1159,7 +1159,7 @@ void *tx_thread(void *g_modem)
             uint8_t *new_data = (uint8_t *)realloc(data, required);
             if (!new_data)
             {
-                fprintf(stderr, "Failed to allocate memory for TX data.\n");
+                HLOGE("modem-tx", "Failed to allocate memory for TX data.");
                 usleep(100000);
                 continue;
             }

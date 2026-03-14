@@ -34,6 +34,7 @@
 #include "defines_modem.h"
 #include "ring_buffer_posix.h"
 #include "tcp_interfaces.h"
+#include "hermes_log.h"
 
 extern volatile bool shutdown_; // global shutdown flag
 extern arq_info arq_conn; // ARQ connection info
@@ -54,11 +55,11 @@ void broadcast_run(generic_modem_t *g_modem)
 {
     if (!g_modem)
     {
-        printf("Broadcast system: invalid modem context.\n");
+        HLOGE("bcast", "Broadcast system: invalid modem context.");
         return;
     }
 
-    printf("Starting broadcast system...\n");
+    HLOGI("bcast", "Starting broadcast system...");
 
     int hermes_mode = -1;
     for (int i = 0; i < 7; i++)
@@ -75,18 +76,18 @@ void broadcast_run(generic_modem_t *g_modem)
         uint32_t expected_frame_size = hermes_broadcast_frame_size[hermes_mode];
         if (g_modem->payload_bytes_per_modem_frame != expected_frame_size)
         {
-            printf("WARNING: Broadcast frame mismatch (FreeDV mode %d, hermes mode %d): modem payload=%zu, hermes-broadcast expects=%u\n",
+            HLOGW("bcast", "Broadcast frame mismatch (FreeDV mode %d, hermes mode %d): modem payload=%zu, hermes-broadcast expects=%u",
                    g_modem->mode, hermes_mode, g_modem->payload_bytes_per_modem_frame, expected_frame_size);
         }
         else
         {
-            printf("Broadcast frame alignment OK (FreeDV mode %d, hermes mode %d): %u bytes.\n",
+            HLOGI("bcast", "Broadcast frame alignment OK (FreeDV mode %d, hermes mode %d): %u bytes.",
                    g_modem->mode, hermes_mode, expected_frame_size);
         }
     }
     else
     {
-        printf("WARNING: FreeDV mode %d is not supported by hermes-broadcast mode mapping.\n",
+        HLOGW("bcast", "FreeDV mode %d is not supported by hermes-broadcast mode mapping.",
                g_modem->mode);
     }
 }

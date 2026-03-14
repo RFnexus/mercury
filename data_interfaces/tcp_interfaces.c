@@ -776,7 +776,7 @@ void *send_thread(void *client_socket_ptr)
 
     if (frame_size == 0 || frame_size > MAX_PAYLOAD)
     {
-        fprintf(stderr, "Invalid broadcast frame size: %zu\n", frame_size);
+        HLOGE("tcp-bcast", "Invalid broadcast frame size: %zu", frame_size);
         return NULL;
     }
 
@@ -785,7 +785,7 @@ void *send_thread(void *client_socket_ptr)
 
     if (!frame_buffer || !kiss_buffer)
     {
-        fprintf(stderr, "Failed to allocate memory for send buffer.\n");
+        HLOGE("tcp-bcast", "Failed to allocate memory for send buffer.");
         free(frame_buffer);
         free(kiss_buffer);
         return NULL;
@@ -818,7 +818,7 @@ void *recv_thread(void *client_socket_ptr)
 
     if (!buffer)
     {
-        fprintf(stderr, "Failed to allocate memory for recv buffer.\n");
+        HLOGE("tcp-bcast", "Failed to allocate memory for recv buffer.");
         return NULL;
     }
 
@@ -827,7 +827,7 @@ void *recv_thread(void *client_socket_ptr)
 
     if (frame_size == 0 || frame_size > MAX_PAYLOAD)
     {
-        fprintf(stderr, "Invalid broadcast frame size: %zu\n", frame_size);
+        HLOGE("tcp-bcast", "Invalid broadcast frame size: %zu", frame_size);
         goto cleanup;
     }
 
@@ -844,7 +844,7 @@ void *recv_thread(void *client_socket_ptr)
 
                 if ((size_t)frame_len != frame_size)
                 {
-                    fprintf(stderr, "Discarding broadcast frame with unexpected size %d (expected %zu)\n",
+                    HLOGW("tcp-bcast", "Discarding broadcast frame with unexpected size %d (expected %zu)",
                             frame_len, frame_size);
                     continue;
                 }
@@ -854,7 +854,7 @@ void *recv_thread(void *client_socket_ptr)
         }
         else if (received == 0)
         {
-            printf("Client disconnected.\n");
+            HLOGI("tcp-bcast", "Client disconnected.");
             break;
         }
         else if (received < 0)
@@ -913,7 +913,7 @@ void *tcp_server_thread(void *port_ptr)
         return NULL;
     }
 
-    printf("Waiting for a client to connect...\n");
+    HLOGI("tcp-bcast", "Waiting for a client to connect...");
 
     while (!shutdown_)
     {
@@ -926,7 +926,7 @@ void *tcp_server_thread(void *port_ptr)
             continue; // Retry accepting a connection
         }
 
-        printf("Client connected.\n");
+        HLOGI("tcp-bcast", "Client connected.");
 
         pthread_t recv_tid, send_tid;
 
@@ -940,7 +940,7 @@ void *tcp_server_thread(void *port_ptr)
         pthread_join(send_tid, NULL);
 
         SOCK_CLOSE(client_socket);
-        printf("Waiting for a new client to connect...\n");
+        HLOGI("tcp-bcast", "Waiting for a new client to connect...");
     }
 
     SOCK_CLOSE(tcp_socket);

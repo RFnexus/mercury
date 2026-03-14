@@ -20,9 +20,10 @@
 
 #include "ring_buffer_posix.h"
 #include "shm_posix.h"
-#include "../common/defines_modem.h"
+#include "defines_modem.h"
 
 #include "audioio.h"
+#include "hermes_log.h"
 
 extern volatile bool shutdown_;
 
@@ -155,7 +156,7 @@ void *radio_playback_thread(void *device_ptr)
     {
         if (aconf.error == NULL || strcmp(aconf.error, "already initialized") != 0)
         {
-            printf("Error in audio->init(): %s\n", aconf.error ? aconf.error : "unknown");
+            HLOGE("audio-play", "Error in audio->init(): %s", aconf.error ? aconf.error : "unknown");
             goto finish_play;
         }
         // "already initialized" is fine - another thread owns the context
@@ -169,7 +170,7 @@ void *radio_playback_thread(void *device_ptr)
     b = audio->alloc();
     if (b == NULL)
     {
-        printf("Error in audio->alloc()\n");
+        HLOGE("audio-play", "Error in audio->alloc()");
         goto finish_play;
     }
 
@@ -179,11 +180,11 @@ void *radio_playback_thread(void *device_ptr)
         r = audio->open(b, cfg, conf.flags);
     if (r != 0)
     {
-        printf("error in audio->open(): %d: %s\n", r, audio->error(b));
+        HLOGE("audio-play", "error in audio->open(): %d: %s", r, audio->error(b));
         goto cleanup_play;
     }
 
-    printf("I/O playback (%s) %d bits per sample / %dHz / %dch / %dms buffer\n", conf.buf.device_id ? conf.buf.device_id : "default", cfg->format, cfg->sample_rate, cfg->channels, cfg->buffer_length_msec);
+    HLOGI("audio-play", "I/O playback (%s) %d bits per sample / %dHz / %dch / %dms buffer", conf.buf.device_id ? conf.buf.device_id : "default", cfg->format, cfg->sample_rate, cfg->channels, cfg->buffer_length_msec);
 
 
     frame_size = cfg->channels * (cfg->format & 0xff) / 8;
@@ -271,12 +272,12 @@ void *radio_playback_thread(void *device_ptr)
             r = audio->write(b, ((uint8_t *)buffer_output_stereo) + total_written, n);
 
             if (r == -FFAUDIO_ESYNC) {
-                printf("detected underrun");
+                HLOGW("audio-play", "detected underrun");
                 continue;
             }
             if (r < 0)
             {
-                printf("ffaudio.write: %s", audio->error(b));
+                HLOGE("audio-play", "ffaudio.write: %s", audio->error(b));
             }
 #if 0 // print time measurement
             else
@@ -292,15 +293,15 @@ void *radio_playback_thread(void *device_ptr)
 
     r = audio->drain(b);
     if (r < 0)
-        printf("ffaudio.drain: %s", audio->error(b));
+        HLOGE("audio-play", "ffaudio.drain: %s", audio->error(b));
 
     r = audio->stop(b);
     if (r != 0)
-        printf("ffaudio.stop: %s", audio->error(b));
+        HLOGE("audio-play", "ffaudio.stop: %s", audio->error(b));
 
     r = audio->clear(b);
     if (r != 0)
-        printf("ffaudio.clear: %s", audio->error(b));
+        HLOGE("audio-play", "ffaudio.clear: %s", audio->error(b));
 
 cleanup_play:
 
@@ -316,7 +317,7 @@ finish_play:
     free(buffer_upsampled);
     free(buffer_output_stereo);
 
-    printf("radio_playback_thread exit\n");
+    HLOGI("audio-play", "radio_playback_thread exit");
 
     shutdown_ = true;
 
@@ -388,7 +389,7 @@ void *radio_capture_thread(void *device_ptr)
     {
         if (aconf.error == NULL || strcmp(aconf.error, "already initialized") != 0)
         {
-            printf("Error in audio->init(): %s\n", aconf.error ? aconf.error : "unknown");
+            HLOGE("audio-cap", "Error in audio->init(): %s", aconf.error ? aconf.error : "unknown");
             goto finish_cap;
         }
         // "already initialized" is fine - another thread owns the context
@@ -402,7 +403,7 @@ void *radio_capture_thread(void *device_ptr)
     b = audio->alloc();
     if (b == NULL)
     {
-        printf("Error in audio->alloc()\n");
+        HLOGE("audio-cap", "Error in audio->alloc()");
         goto finish_cap;
     }
 
@@ -412,11 +413,11 @@ void *radio_capture_thread(void *device_ptr)
         r = audio->open(b, cfg, conf.flags);
     if (r != 0)
     {
-        printf("error in audio->open(): %d: %s\n", r, audio->error(b));
+        HLOGE("audio-cap", "error in audio->open(): %d: %s", r, audio->error(b));
         goto cleanup_cap;
     }
 
-    printf("I/O capture (%s) %d bits per sample / %dHz / %dch / %dms buffer\n", conf.buf.device_id ? conf.buf.device_id : "default", cfg->format, cfg->sample_rate, cfg->channels, cfg->buffer_length_msec);
+    HLOGI("audio-cap", "I/O capture (%s) %d bits per sample / %dHz / %dch / %dms buffer", conf.buf.device_id ? conf.buf.device_id : "default", cfg->format, cfg->sample_rate, cfg->channels, cfg->buffer_length_msec);
 
     frame_size = cfg->channels * (cfg->format & 0xff) / 8;
     msec_bytes = cfg->sample_rate * frame_size / 1000;
@@ -439,7 +440,7 @@ void *radio_capture_thread(void *device_ptr)
         r = audio->read(b, (const void **)&buffer);
         if (r < 0)
         {
-            printf("ffaudio.read: %s", audio->error(b));
+            HLOGE("audio-cap", "ffaudio.read: %s", audio->error(b));
             continue;
         }
 #if 0
@@ -487,17 +488,17 @@ void *radio_capture_thread(void *device_ptr)
             if (circular_buf_free_size(capture_buffer) >= (size_t)(downsampled_frames * sizeof(int32_t)))
                 write_buffer(capture_buffer, (uint8_t *)buffer_downsampled, downsampled_frames * sizeof(int32_t));
             else
-                printf("Buffer full in capture buffer!\n");
+                HLOGW("audio-cap", "Buffer full in capture buffer!");
         }
     }
 
     r = audio->stop(b);
     if (r != 0)
-        printf("ffaudio.stop: %s", audio->error(b));
+        HLOGE("audio-cap", "ffaudio.stop: %s", audio->error(b));
 
     r = audio->clear(b);
     if (r != 0)
-        printf("ffaudio.clear: %s", audio->error(b));
+        HLOGE("audio-cap", "ffaudio.clear: %s", audio->error(b));
 
     free(buffer_output);
     free(buffer_downsampled);
@@ -511,7 +512,7 @@ cleanup_cap:
         audio->uninit();
 
 finish_cap:
-    printf("radio_capture_thread exit\n");
+    HLOGI("audio-cap", "radio_capture_thread exit");
 
     shutdown_ = true;
 
