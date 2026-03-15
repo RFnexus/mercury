@@ -67,6 +67,7 @@ MINGW_AR  = x86_64-w64-mingw32-ar
 
 prefix ?= /usr
 bindir ?= $(prefix)/bin
+mandir ?= $(prefix)/share/man
 
 DOXYGEN ?= doxygen
 DOXYFILE ?= Doxyfile
@@ -112,6 +113,7 @@ endif
 
 install: all
 	install -D -m 755 $(BINARY) $(DESTDIR)$(bindir)/mercury
+	install -D -m 644 mercury.1 $(DESTDIR)$(mandir)/man1/mercury.1
 
 $(BINARY): $(MERCURY_LINK_INPUTS)
 	$(CC) -o $(BINARY)  \
