@@ -18,15 +18,9 @@
  *
  */
 
-// json communication between UI and backend
-// POSIX UDP JSON sender + blocking receiver, each on its own thread.
-// No third-party libs; includes a minimal JSON string escaper.
-
-// To run test main(), compile with -DTEST_MAIN
-// Eg. how to run. One side listens on port 5006, other side sends to
-// port 5005. Both sides can send and receive.
-// ./ui_communication 127.0.0.1 5005 5006
-// ./ui_communication 127.0.0.1 5006 5005
+// WebSocket-based UI communication between Mercury backend and MercuryQT UI.
+// Publisher threads broadcast status/device lists; command callback handles
+// incoming UI commands via the websocket server.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,10 +31,6 @@
 #include <stdbool.h>
 
 #include "../common/os_interop.h"
-#if !defined(_WIN32)
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#endif
 
 /* Cross-platform microsecond sleep */
 #ifdef _WIN32
@@ -51,7 +41,6 @@
 
 #include "ui_communication.h"
 
-#ifndef TEST_MAIN
 #include "../datalink_arq/arq.h"
 #include "../data_interfaces/net.h"
 #include "../data_interfaces/tcp_interfaces.h"
@@ -59,412 +48,103 @@
 #include "../modem/freedv/modem_stats.h"
 #include "../modem/modem.h"
 
+extern int get_soundcard_list(int audio_system, int mode,
+                              char ids[][64], char dev_names[][64], int max_count);
+
+extern int audioio_restart(const char *capture_dev, const char *playback_dev,
+                           int audio_subsys, int capture_channel_layout);
+
+extern int radio_io_get_radio_list(char ids[][16], char names[][64], int max_count);
+extern int radio_io_restart(int new_radio_type, const char *device_path);
+extern const char *radio_io_get_device_path(void);
+extern int radio_io_get_radio_type(void);
+
 // global shutdown flag from main.c
 extern volatile bool shutdown_;
-#else
-// Standalone test mode: provide a local shutdown flag
-static bool shutdown_ = false;
-// Stub logger macros for standalone test build
-#define HLOGD(c, fmt, ...) printf("[DBG] [" c "] " fmt "\n", ##__VA_ARGS__)
-#define HLOGI(c, fmt, ...) printf("[INF] [" c "] " fmt "\n", ##__VA_ARGS__)
-#define HLOGW(c, fmt, ...) printf("[WRN] [" c "] " fmt "\n", ##__VA_ARGS__)
-#define HLOGE(c, fmt, ...) printf("[ERR] [" c "] " fmt "\n", ##__VA_ARGS__)
-#endif
 
 #define UI_LOG_TAG "ui-comm"
 
-// ---------------- TX ----------------
-int udp_tx_init(udp_tx_t *tx, const char *ip, uint16_t port)
+// Called by the WebSocket server thread when a new UI client connects.
+// Sets pending flags so the publisher sends device lists and radio list.
+static void ws_connect_handler(void *user_data)
 {
-    tx->sock = socket(AF_INET, SOCK_DGRAM, 0);
-
-    if (tx->sock < 0)
-    {
-        HLOGE(UI_LOG_TAG, "socket(): %s", strerror(errno));
-        return -1;
+    ui_ctx_t *ctx = (ui_ctx_t *)user_data;
+    if (ctx) {
+        ctx->soundcard_list_pending = 1;
+        ctx->radio_list_pending = 1;
     }
+}
 
-    memset(&tx->dest, 0, sizeof(tx->dest));
-    tx->dest.sin_family = AF_INET;
-    tx->dest.sin_port = htons(port);
+// ---------------- WS COMMAND CALLBACK ----------------
+// Called by the websocket server thread when a command JSON arrives from UI.
+static int ws_command_handler(const ws_command_t *cmd, void *user_data)
+{
+    ui_ctx_t *ctx = (ui_ctx_t *)user_data;
+    if (!ctx || !cmd)
+        return -1;
 
-    if (inet_pton(AF_INET, ip, &tx->dest.sin_addr) <= 0)
-    {
-        HLOGE(UI_LOG_TAG, "inet_pton(%s): %s", ip, strerror(errno));
-        SOCK_CLOSE(tx->sock);
-        tx->sock = -1;
+    HLOGI(UI_LOG_TAG, "WS CMD from UI: command=\"%s\" value=\"%s\" value2=\"%s\"",
+          cmd->command, cmd->value, cmd->value2);
+
+    if (strcmp(cmd->command, "set_audio_config") == 0) {
+        // value = capture_dev, value2 = playback_dev, value3 = input_channel
+        if (cmd->value[0])
+            strncpy(ctx->selected_capture_dev, cmd->value,
+                    sizeof(ctx->selected_capture_dev) - 1);
+        HLOGI(UI_LOG_TAG, "Capture device set to: %s", ctx->selected_capture_dev);
+
+        if (cmd->value2[0])
+            strncpy(ctx->selected_playback_dev, cmd->value2,
+                    sizeof(ctx->selected_playback_dev) - 1);
+        HLOGI(UI_LOG_TAG, "Playback device set to: %s", ctx->selected_playback_dev);
+
+        if (strcmp(cmd->value3, "right") == 0)
+            ctx->rx_input_channel = 1;  // RIGHT
+        else if (strcmp(cmd->value3, "stereo") == 0)
+            ctx->rx_input_channel = 2;  // STEREO
+        else
+            ctx->rx_input_channel = 0;  // LEFT (default)
+        HLOGI(UI_LOG_TAG, "Input channel set to: %s (%d)",
+              cmd->value3, ctx->rx_input_channel);
+
+        HLOGI(UI_LOG_TAG, "Restarting audioio subsystem (capture=%s playback=%s channel=%d)",
+              ctx->selected_capture_dev, ctx->selected_playback_dev, ctx->rx_input_channel);
+        audioio_restart(ctx->selected_capture_dev, ctx->selected_playback_dev,
+                        ctx->audio_system, ctx->rx_input_channel);
+        HLOGI(UI_LOG_TAG, "Audioio subsystem restarted successfully");
+
+    } else if (strcmp(cmd->command, "set_radio_config") == 0) {
+        int new_radio_type = atoi(cmd->value);
+        const char *dev_path = cmd->value2;
+        HLOGI(UI_LOG_TAG, "Radio set_radio_config command: model_id=%d device_path=\"%s\"",
+              new_radio_type, dev_path);
+        int rc = radio_io_restart(new_radio_type, dev_path);
+        if (rc == 0) {
+            HLOGI(UI_LOG_TAG, "Radioio subsystem restarted (model=%d, path=%s)",
+                  new_radio_type, dev_path);
+            ctx->radio_list_pending = 1;
+        } else {
+            HLOGE(UI_LOG_TAG, "Radioio subsystem restart FAILED (model=%d, path=%s, rc=%d)",
+                  new_radio_type, dev_path, rc);
+            return rc;
+        }
+    } else {
+        HLOGW(UI_LOG_TAG, "Unknown UI command: %s", cmd->command);
         return -1;
     }
 
     return 0;
 }
 
-void udp_tx_close(udp_tx_t *tx)
-{
-    if (tx->sock >= 0) {
-        SOCK_CLOSE(tx->sock);
-        tx->sock = -1;
-    }
-}
-
-int udp_tx_send_json_pairs(udp_tx_t *tx, ...)
-{
-    char buf[1500];
-    char tmp[512];
-    buf[0] = '\0';
-
-    strcat(buf, "{");
-    va_list ap;
-    va_start(ap, tx);
-    const char *key;
-    int first = 1;
-    while ((key = va_arg(ap, const char *)) != NULL)
-    {
-        const char *val = va_arg(ap, const char *);
-        if (!first) strcat(buf, ",");
-
-        // Don't quote arrays, objects, numbers, booleans, null
-        // But always quote empty strings (len==0) to produce valid JSON
-        if (val[0] != '\0' &&
-            (val[0] == '[' || val[0] == '{' ||
-            strcmp(val, "true") == 0 || strcmp(val, "false") == 0 ||
-            strcmp(val, "null") == 0 || strspn(val, "0123456789.-") == strlen(val))) {
-            snprintf(tmp, sizeof(tmp), "\"%s\":%s", key, val);
-        } else {
-            snprintf(tmp, sizeof(tmp), "\"%s\":\"%s\"", key, val);
-        }
-
-        strcat(buf, tmp);
-        first = 0;
-    }
-    va_end(ap);
-    strcat(buf, "}");
-
-    ssize_t sent = sendto(tx->sock, buf, strlen(buf), 0,
-                          (struct sockaddr *)&tx->dest, sizeof(tx->dest));
-
-    return sent;
-}
-
-int udp_tx_send_status(udp_tx_t *tx,
-                       int bitrate, double snr,
-                       const char *user_callsign,
-                       const char *dest_callsign,
-                       int sync, modem_direction_t dir,
-                       int client_tcp_connected,
-                       long bytes_transmitted, long bytes_received,
-                       int waterfall_enabled)
-{
-    char br[32], snrbuf[32], tx_bytes[32], rx_bytes[32];
-    snprintf(br, sizeof(br), "%d", bitrate);
-    snprintf(snrbuf, sizeof(snrbuf), "%.1f", snr);
-    snprintf(tx_bytes, sizeof(tx_bytes), "%ld", bytes_transmitted);
-    snprintf(rx_bytes, sizeof(rx_bytes), "%ld", bytes_received);
-
-    return udp_tx_send_json_pairs(tx,
-        "type", "status",
-        "bitrate", br,
-        "snr", snrbuf,
-        "user_callsign", user_callsign,
-        "dest_callsign", dest_callsign,
-        "sync", sync ? "true" : "false",
-        "direction", dir == DIR_TX ? "tx" : "rx",
-        "client_tcp_connected", client_tcp_connected ? "true" : "false",
-        "bytes_transmitted", tx_bytes,
-        "bytes_received", rx_bytes,
-        "waterfall", waterfall_enabled ? "true" : "false",
-        NULL);
-}
-
-int udp_tx_send_soundcard_list(udp_tx_t *tx,
-                               const char *selected_soundcard,
-                               const char *soundcards[], int count) {
-    char buf[1500]; // max mtu size
-    snprintf(buf, sizeof(buf), "[");
-    for (int i = 0; i < count; i++) {
-        strcat(buf, "\"");
-        strcat(buf, soundcards[i]);
-        strcat(buf, "\"");
-        if (i < count - 1) strcat(buf, ",");
-    }
-    strcat(buf, "]");
-
-    return udp_tx_send_json_pairs(tx,
-        "type", "soundcard_list",
-        "selected", selected_soundcard,
-        "list", buf,
-        NULL);
-}
-
-int udp_tx_send_radio_list(udp_tx_t *tx,
-                           const char *selected_radio,
-                           const char *radios[], int count) {
-    char buf[1500];
-    snprintf(buf, sizeof(buf), "[");
-    for (int i = 0; i < count; i++) {
-        strcat(buf, "\"");
-        strcat(buf, radios[i]);
-        strcat(buf, "\"");
-        if (i < count - 1) strcat(buf, ",");
-    }
-    strcat(buf, "]");
-
-    return udp_tx_send_json_pairs(tx,
-        "type", "radio_list",
-        "selected", selected_radio,
-        "list", buf,
-        NULL);
-}
-
-// ---------------- RX ----------------
-static void parse_json(const char *json, char keys[][64], char vals[][1024], int *count)
-{
-    *count = 0;
-    const char *p = json;
-    while ((p = strchr(p, '"')) && *count < 32)
-    {
-        // ---- parse key ----
-        const char *q = strchr(p + 1, '"');
-        if (!q)
-            break;
-        int klen = q - (p + 1);
-        strncpy(keys[*count], p + 1, klen);
-        keys[*count][klen] = '\0';
-
-        // ---- find colon ----
-        p = strchr(q + 1, ':');
-        if (!p)
-            break;
-        p++;
-
-        // ---- skip whitespace ----
-        while (*p == ' ' || *p == '\t')
-            p++;
-
-        // ---- parse value ----
-        if (*p == '"')
-        {
-            // string value
-            p++;
-            q = strchr(p, '"');
-            if (!q) break;
-            int vlen = q - p;
-            strncpy(vals[*count], p, vlen);
-            vals[*count][vlen] = '\0';
-            p = q + 1;
-        }
-        else if (*p == '[')
-        {
-            // array value
-            int depth = 1;
-            const char *start = p;
-            p++;
-            while (*p && depth > 0)
-            {
-                if (*p == '[') depth++;
-                else if (*p == ']') depth--;
-                p++;
-            }
-
-            if (depth != 0)
-                break; // malformed
-
-            int vlen = p - start;
-            if (vlen >= (int)sizeof(vals[*count]))
-                vlen = sizeof(vals[*count]) - 1;
-
-            strncpy(vals[*count], start, vlen);
-            vals[*count][vlen] = '\0';
-        }
-        else
-        {
-            // bare value (true, false, null, number)
-            const char *start = p;
-            while (*p && *p != ',' && *p != '}') p++;
-            int vlen = p - start;
-            strncpy(vals[*count], start, vlen);
-            vals[*count][vlen] = '\0';
-        }
-
-        (*count)++;
-
-        // ---- skip to next key ----
-        while (*p && *p != '"')
-        {
-            if (*p == '}') return;
-            p++;
-        }
-    }
-}
-
-static void fill_modem_message(modem_message_t *msg, char keys[][64], char vals[][1024], int pairs)
-{
-    memset(msg, 0, sizeof(*msg));
-    msg->type = MSG_UNKNOWN;
-
-    for (int i = 0; i < pairs; i++)
-    {
-        if (strcmp(keys[i], "type") == 0)
-        {
-            if (strcmp(vals[i], "status") == 0) msg->type = MSG_STATUS;
-            else if (strcmp(vals[i], "config") == 0) msg->type = MSG_CONFIG;
-            else if (strcmp(vals[i], "soundcard_list") == 0) msg->type = MSG_SOUNDCARD_LIST;
-            else if (strcmp(vals[i], "radio_list") == 0) msg->type = MSG_RADIO_LIST;
-        }
-    }
-
-    for (int i = 0; i < pairs; i++)
-    {
-        switch (msg->type) {
-        case MSG_UNKNOWN:
-            // No specific fields to parse
-            break;
-        case MSG_STATUS:
-            if (strcmp(keys[i], "bitrate") == 0)
-                msg->status.bitrate = atoi(vals[i]);
-            else if (strcmp(keys[i], "snr") == 0)
-                msg->status.snr = atof(vals[i]);
-            else if (strcmp(keys[i], "user_callsign") == 0)
-                strncpy(msg->status.user_callsign, vals[i],
-                        sizeof msg->status.user_callsign - 1);
-            else if (strcmp(keys[i], "dest_callsign") == 0)
-                strncpy(msg->status.dest_callsign, vals[i],
-                        sizeof msg->status.dest_callsign - 1);
-            else if (strcmp(keys[i], "sync") == 0)
-                msg->status.sync = (strcmp(vals[i], "true") == 0);
-            else if (strcmp(keys[i], "direction") == 0)
-                msg->status.dir = (strcmp(vals[i], "tx") == 0) ? DIR_TX : DIR_RX;
-            else if (strcmp(keys[i], "client_tcp_connected") == 0)
-                msg->status.client_tcp_connected = (strcmp(vals[i], "true") == 0);
-            else if (strcmp(keys[i], "bytes_transmitted") == 0)
-                msg->status.bytes_transmitted = atol(vals[i]);
-            else if (strcmp(keys[i], "bytes_received") == 0)
-                msg->status.bytes_received = atol(vals[i]);
-                    break;
-        case MSG_SOUNDCARD_LIST:
-            if (msg->type == MSG_SOUNDCARD_LIST)
-            {
-                if (strcmp(keys[i], "selected") == 0)
-                    strncpy(msg->soundcard_list.selected, vals[i], sizeof msg->soundcard_list.selected - 1);
-                else
-                    if (strcmp(keys[i], "list") == 0)
-                        strncpy(msg->soundcard_list.list, vals[i], sizeof msg->soundcard_list.list - 1);
-            }
-            break;
-        case MSG_RADIO_LIST:
-            if (strcmp(keys[i], "selected") == 0)
-                strncpy(msg->radio_list.selected, vals[i], sizeof msg->radio_list.selected - 1);
-            else
-                if (strcmp(keys[i], "list") == 0)
-                    strncpy(msg->radio_list.list, vals[i], sizeof msg->radio_list.list - 1);
-            break;
-        default:
-            HLOGW(UI_LOG_TAG, "Unknown message type, raw: %s", vals[i]);
-        }
-    }
-}
-
-
-void *rx_thread_main(void *arg)
-{
-    rx_args_t *rxa = (rx_args_t *)arg;
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
-    {
-        HLOGE(UI_LOG_TAG, "socket(rx): %s", strerror(errno));
-        free(rxa);
-        return NULL;
-    }
-
-    // Set receive timeout so we can check shutdown_ periodically
-#ifdef _WIN32
-    DWORD rcvtimeo = 1000;  /* 1 second in milliseconds */
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char *)&rcvtimeo, sizeof(rcvtimeo));
-#else
-    struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-#endif
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(rxa->listen_port);
-    addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        HLOGE(UI_LOG_TAG, "bind(port %u): %s", rxa->listen_port, strerror(errno));
-        SOCK_CLOSE(sock);
-        free(rxa);
-        return NULL;
-    }
-
-    free(rxa); // no longer needed
-
-    char buf[1500];
-    while (!shutdown_)
-    {
-        struct sockaddr_in src;
-        socklen_t srclen = sizeof(src);
-        int n = recvfrom(sock, buf, sizeof(buf) - 1, 0,
-                         (struct sockaddr *)&src, &srclen);
-        if (n <= 0) continue;
-        buf[n] = '\0';
-
-        HLOGD(UI_LOG_TAG, "RX %d bytes: %s", n, buf);
-        char keys[32][64], vals[32][1024];
-        int pairs = 0;
-        parse_json(buf, keys, vals, &pairs);
-
-        modem_message_t msg;
-        fill_modem_message(&msg, keys, vals, pairs);
-
-        char ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &src.sin_addr, ip, sizeof(ip));
-        HLOGD(UI_LOG_TAG, "RX from %s:%u", ip, ntohs(src.sin_port));
-
-        switch (msg.type) {
-        case MSG_STATUS:
-            HLOGD(UI_LOG_TAG, "STATUS bitrate=%d snr=%.1f call=%s dest=%s sync=%s dir=%s tcp=%s tx=%ld rx=%ld",
-                  msg.status.bitrate, msg.status.snr,
-                  msg.status.user_callsign, msg.status.dest_callsign,
-                  msg.status.sync ? "true" : "false",
-                  msg.status.dir == DIR_TX ? "tx" : "rx",
-                  msg.status.client_tcp_connected ? "true" : "false",
-                  msg.status.bytes_transmitted, msg.status.bytes_received);
-            break;
-
-        case MSG_SOUNDCARD_LIST:
-            HLOGD(UI_LOG_TAG, "SOUNDCARD_LIST selected=%s list=%s",
-                  msg.soundcard_list.selected, msg.soundcard_list.list);
-            break;
-
-        case MSG_RADIO_LIST:
-            HLOGD(UI_LOG_TAG, "RADIO_LIST selected=%s list=%s",
-                  msg.radio_list.selected, msg.radio_list.list);
-            break;
-
-        default:
-            HLOGW(UI_LOG_TAG, "Unknown message type, raw: %s", buf);
-            break;
-        }
-    }
-
-    SOCK_CLOSE(sock);
-    return NULL;
-}
-
 // ---------------- UI PUBLISHER THREAD ----------------
 // Periodically gathers modem/ARQ/network status and sends it to the UI.
-
-#ifndef TEST_MAIN
 
 void *ui_publisher_thread(void *arg)
 {
     ui_ctx_t *ctx = (ui_ctx_t *)arg;
-    udp_tx_t *tx = &ctx->tx;
 
-    HLOGI(UI_LOG_TAG, "Publisher started - sending status every %d ms to port %d",
-           UI_PUBLISH_INTERVAL_US / 1000, ntohs(tx->dest.sin_port));
+    HLOGI(UI_LOG_TAG, "Publisher started - sending status every %dms via WebSocket (port %u)",
+           UI_PUBLISH_INTERVAL_US / 1000, ctx->ws_port);
 
     while (!shutdown_)
     {
@@ -475,7 +155,17 @@ void *ui_publisher_thread(void *arg)
         int bitrate = (int)tnc_get_last_bitrate_bps();
         double snr = (double)tnc_get_last_snr();
         const char *user_call = arq_conn.my_call_sign;
-        const char *dest_call = arq_conn.dst_addr;
+        /* Determine remote peer for UI display.
+         * src_addr/dst_addr follow TNC convention (initiator/target):
+         *   ISS (caller):   src_addr = self,   dst_addr = remote
+         *   IRS (receiver): src_addr = remote,  dst_addr = self
+         * Pick whichever is NOT our own callsign. */
+        const char *dest_call;
+        if (arq_conn.dst_addr[0] != '\0' &&
+            strcmp(arq_conn.dst_addr, arq_conn.my_call_sign) != 0)
+            dest_call = arq_conn.dst_addr;   /* ISS: dst is remote */
+        else
+            dest_call = arq_conn.src_addr;   /* IRS: src is remote */
         int sync = 0;
         modem_direction_t dir = DIR_RX;
         int tcp_connected = 0;
@@ -522,15 +212,137 @@ void *ui_publisher_thread(void *arg)
             if (dest_call) strncpy(ctx->last_sent_status.dest_callsign, dest_call, sizeof(ctx->last_sent_status.dest_callsign)-1);
         }
 
-        // --- Send status to UI ---
-        udp_tx_send_status(tx,
-                           bitrate, snr,
-                           user_call ? user_call : "",
-                           dest_call ? dest_call : "",
-                           sync, dir,
-                           tcp_connected,
-                           bytes_tx, bytes_rx,
-                           ctx->waterfall_enabled);
+        // --- Build and broadcast status JSON via WebSocket ---
+        {
+            char buf[4096];
+            int pos = 0;
+            pos += snprintf(buf + pos, sizeof(buf) - pos,
+                "{\"type\":\"status\","
+                "\"bitrate\":%d,"
+                "\"snr\":%.1f,"
+                "\"user_callsign\":\"%s\","
+                "\"dest_callsign\":\"%s\","
+                "\"sync\":%s,"
+                "\"direction\":\"%s\","
+                "\"client_tcp_connected\":%s,"
+                "\"bytes_transmitted\":%ld,"
+                "\"bytes_received\":%ld,"
+                "\"waterfall\":%s}",
+                bitrate, snr,
+                user_call ? user_call : "",
+                dest_call ? dest_call : "",
+                sync ? "true" : "false",
+                dir == DIR_TX ? "tx" : "rx",
+                tcp_connected ? "true" : "false",
+                bytes_tx, bytes_rx,
+                ctx->waterfall_enabled ? "true" : "false");
+
+            ws_broadcast_json(&ctx->ws, buf);
+        }
+
+        // --- Send capture/playback device lists and input channel when a new UI client connects ---
+        if (ctx->soundcard_list_pending)
+        {
+            ctx->soundcard_list_pending = 0;
+
+            // Capture (input) devices - mode 1 = FFAUDIO_DEV_CAPTURE
+            char cap_ids[32][64], cap_names[32][64];
+            int cap_count = get_soundcard_list(ctx->audio_system, 1, cap_ids, cap_names, 32);
+            if (cap_count > 0)
+            {
+                char buf[4096];
+                int pos = 0;
+                pos += snprintf(buf + pos, sizeof(buf) - pos,
+                    "{\"type\":\"capture_dev_list\",\"selected\":\"%s\",\"list\":[",
+                    ctx->selected_capture_dev);
+                for (int i = 0; i < cap_count && pos < (int)sizeof(buf) - 128; i++) {
+                    if (i > 0) buf[pos++] = ',';
+                    pos += snprintf(buf + pos, sizeof(buf) - pos,
+                        "{\"name\":\"%s\",\"id\":\"%s\"}", cap_names[i], cap_ids[i]);
+                }
+                pos += snprintf(buf + pos, sizeof(buf) - pos, "]}");
+                ws_broadcast_json(&ctx->ws, buf);
+            }
+
+            // Playback (output) devices - mode 0 = FFAUDIO_DEV_PLAYBACK
+            char pb_ids[32][64], pb_names[32][64];
+            int pb_count = get_soundcard_list(ctx->audio_system, 0, pb_ids, pb_names, 32);
+            if (pb_count > 0)
+            {
+                char buf[4096];
+                int pos = 0;
+                pos += snprintf(buf + pos, sizeof(buf) - pos,
+                    "{\"type\":\"playback_dev_list\",\"selected\":\"%s\",\"list\":[",
+                    ctx->selected_playback_dev);
+                for (int i = 0; i < pb_count && pos < (int)sizeof(buf) - 128; i++) {
+                    if (i > 0) buf[pos++] = ',';
+                    pos += snprintf(buf + pos, sizeof(buf) - pos,
+                        "{\"name\":\"%s\",\"id\":\"%s\"}", pb_names[i], pb_ids[i]);
+                }
+                pos += snprintf(buf + pos, sizeof(buf) - pos, "]}");
+                ws_broadcast_json(&ctx->ws, buf);
+            }
+
+            // Input channel selection
+            const char *ch_str;
+            switch (ctx->rx_input_channel) {
+                case 1:  ch_str = "right"; break;
+                case 2:  ch_str = "stereo"; break;
+                default: ch_str = "left"; break;
+            }
+            char ch_buf[256];
+            snprintf(ch_buf, sizeof(ch_buf),
+                "{\"type\":\"input_channel\",\"selected\":\"%s\","
+                "\"list\":[\"left\",\"right\",\"stereo\"]}", ch_str);
+            ws_broadcast_json(&ctx->ws, ch_buf);
+        }
+
+        // --- Send radio list to UI (once at startup, and after set_radio_config) ---
+        if (ctx->radio_list_pending)
+        {
+            ctx->radio_list_pending = 0;
+            char (*radio_ids)[16] = malloc(sizeof(*radio_ids) * 512);
+            char (*radio_names)[64] = malloc(sizeof(*radio_names) * 512);
+            if (!radio_ids || !radio_names)
+            {
+                HLOGE(UI_LOG_TAG, "Failed to allocate radio list arrays");
+                free(radio_ids);
+                free(radio_names);
+                continue;
+            }
+            int radio_count = radio_io_get_radio_list(radio_ids, radio_names, 512);
+            if (radio_count > 0)
+            {
+                char sel_buf[16] = "";
+                int cur_type = radio_io_get_radio_type();
+                if (cur_type > 0)
+                    snprintf(sel_buf, sizeof(sel_buf), "%d", cur_type);
+                const char *cur_dev = radio_io_get_device_path();
+
+                const size_t buf_size = 65536;
+                char *buf = malloc(buf_size);
+                if (!buf) {
+                    HLOGE(UI_LOG_TAG, "Failed to allocate radio_list buffer");
+                    free(radio_ids);
+                    free(radio_names);
+                    continue;
+                }
+                int pos = 0;
+                pos += snprintf(buf + pos, buf_size - pos,
+                    "{\"type\":\"radio_list\",\"selected\":\"%s\",\"device_path\":\"%s\",\"list\":[",
+                    sel_buf, cur_dev ? cur_dev : "");
+                for (int i = 0; i < radio_count && pos < (int)buf_size - 128; i++) {
+                    if (i > 0) buf[pos++] = ',';
+                    pos += snprintf(buf + pos, buf_size - pos,
+                        "{\"name\":\"%s\",\"id\":\"%s\"}", radio_names[i], radio_ids[i]);
+                }
+                pos += snprintf(buf + pos, buf_size - pos, "]}");
+                ws_broadcast_json(&ctx->ws, buf);
+                free(buf);
+            }
+            free(radio_ids);
+            free(radio_names);
+        }
 
         hermes_usleep(UI_PUBLISH_INTERVAL_US);
     }
@@ -547,7 +359,7 @@ void *spectrum_publisher_thread(void *arg)
 {
     ui_ctx_t *ctx = (ui_ctx_t *)arg;
 
-    HLOGI(UI_LOG_TAG, "Spectrum publisher started - sending spectrum every %d ms",
+    HLOGI(UI_LOG_TAG, "Spectrum publisher started - sending spectrum every %d ms via WebSocket",
           SPECTRUM_PUBLISH_INTERVAL_US / 1000);
 
     while (!shutdown_)
@@ -556,8 +368,33 @@ void *spectrum_publisher_thread(void *arg)
         int sr = modem_get_rx_spectrum(spec_dB, MODEM_STATS_NSPEC);
         if (sr > 0)
         {
-            spectrum_tx_send(&ctx->spectrum_tx, spec_dB,
-                             (uint16_t)MODEM_STATS_NSPEC, (uint16_t)sr);
+            // Build binary spectrum frame: magic(4) + fft_size(2) + sample_rate(2) + floats
+            uint8_t frame[8 + MODEM_STATS_NSPEC * sizeof(float)];
+            uint16_t fft_size = (uint16_t)MODEM_STATS_NSPEC;
+            uint16_t sample_rate = (uint16_t)sr;
+            /* All fields are little-endian on the wire for compatibility with mercury-qt */
+#define SPECTRUM_MAGIC 0x4D435259U
+            frame[0] = (uint8_t)( SPECTRUM_MAGIC        & 0xFF);
+            frame[1] = (uint8_t)((SPECTRUM_MAGIC >>  8) & 0xFF);
+            frame[2] = (uint8_t)((SPECTRUM_MAGIC >> 16) & 0xFF);
+            frame[3] = (uint8_t)((SPECTRUM_MAGIC >> 24) & 0xFF);
+#undef SPECTRUM_MAGIC
+            frame[4] = (uint8_t)(fft_size & 0xFF);
+            frame[5] = (uint8_t)((fft_size >> 8) & 0xFF);
+            frame[6] = (uint8_t)(sample_rate & 0xFF);
+            frame[7] = (uint8_t)((sample_rate >> 8) & 0xFF);
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+            for (int _i = 0; _i < MODEM_STATS_NSPEC; _i++) {
+                uint32_t _w;
+                memcpy(&_w, &spec_dB[_i], 4);
+                _w = ((_w >> 24) & 0xFF) | ((_w >> 8) & 0xFF00) |
+                     ((_w & 0xFF00) << 8) | ((_w & 0xFF) << 24);
+                memcpy(frame + 8 + _i * 4, &_w, 4);
+            }
+#else
+            memcpy(frame + 8, spec_dB, MODEM_STATS_NSPEC * sizeof(float));
+#endif
+            ws_broadcast_binary(&ctx->ws, frame, 8 + MODEM_STATS_NSPEC * sizeof(float));
         }
 
         hermes_usleep(SPECTRUM_PUBLISH_INTERVAL_US);
@@ -569,65 +406,50 @@ void *spectrum_publisher_thread(void *arg)
 
 // ---------------- HIGH-LEVEL INIT / SHUTDOWN ----------------
 
-int ui_comm_init(ui_ctx_t *ctx, const char *ip, uint16_t tx_port, int waterfall_enabled)
+int ui_comm_init(ui_ctx_t *ctx, uint16_t ws_port, int waterfall_enabled,
+                 int audio_system, const char *selected_capture, const char *selected_playback,
+                 int rx_input_channel)
 {
     memset(ctx, 0, sizeof(*ctx));
 
     ctx->waterfall_enabled = waterfall_enabled;
+    ctx->audio_system = audio_system;
+    ctx->rx_input_channel = rx_input_channel;
+    ctx->ws_port = ws_port;
+    if (selected_capture)
+        strncpy(ctx->selected_capture_dev, selected_capture, sizeof(ctx->selected_capture_dev) - 1);
+    else
+        ctx->selected_capture_dev[0] = '\0';
+    if (selected_playback)
+        strncpy(ctx->selected_playback_dev, selected_playback, sizeof(ctx->selected_playback_dev) - 1);
+    else
+        ctx->selected_playback_dev[0] = '\0';
 
-    // Initialize TX socket - sends status TO the UI
-    if (udp_tx_init(&ctx->tx, ip, tx_port) != 0) {
-        HLOGE(UI_LOG_TAG, "Failed to init TX socket to %s:%u", ip, tx_port);
+    // Initialize WebSocket server (bidirectional: status TX + command RX)
+    // Serve static test page from websocket/web/ directory
+    if (ws_init(&ctx->ws, ws_port, "gui_interface/websocket/web",
+                ws_command_handler, ctx) != 0) {
+        HLOGE(UI_LOG_TAG, "Failed to init WebSocket server on port %u", ws_port);
         return -1;
     }
-    HLOGI(UI_LOG_TAG, "TX socket ready - sending to %s:%u", ip, tx_port);
+    // Register connect callback - sends all device lists and radio list on each new UI connection
+    ctx->ws.connect_callback = ws_connect_handler;
+    ctx->ws.connect_callback_data = ctx;
+    HLOGI(UI_LOG_TAG, "WebSocket server ready on port %u", ws_port);
 
-    if (waterfall_enabled) {
-        // Spectrum is sent on tx_port + 2 (spectrum UDP port = UI base port + 2)
-        uint16_t spectrum_port = tx_port + 2;
-        if (spectrum_tx_init(&ctx->spectrum_tx, ip, spectrum_port) != 0) {
-            HLOGW(UI_LOG_TAG, "Failed to init spectrum TX socket (waterfall will not work)");
-            // Non-fatal: continue without spectrum
-        } else {
-            HLOGI(UI_LOG_TAG, "Spectrum TX ready - sending to %s:%u", ip, spectrum_port);
-        }
-    } else {
-        HLOGI(UI_LOG_TAG, "Waterfall disabled - spectrum data wont be sent to the UI");
-        ctx->spectrum_tx.sock = -1;
-    }
-
-    // Start RX thread - listens for commands FROM the UI
-    uint16_t rx_port = tx_port + 1;
-    ctx->rx_port = rx_port;
-    rx_args_t *rxa = malloc(sizeof(rx_args_t));
-    if (!rxa) {
-        udp_tx_close(&ctx->tx);
-        return -1;
-    }
-    rxa->listen_port = rx_port;
-    if (pthread_create(&ctx->rx_tid, NULL, rx_thread_main, rxa) != 0) {
-        HLOGE(UI_LOG_TAG, "pthread_create(rx) failed: %s", strerror(errno));
-        free(rxa);
-        udp_tx_close(&ctx->tx);
-        return -1;
-    }
-    pthread_detach(ctx->rx_tid);
-    HLOGI(UI_LOG_TAG, "RX thread started - listening on port %u", rx_port);
-
-    // Start publisher thread - periodic status broadcaster
+    // Start publisher thread - periodic status broadcaster (via WebSocket)
     if (pthread_create(&ctx->pub_tid, NULL, ui_publisher_thread, ctx) != 0) {
         HLOGE(UI_LOG_TAG, "pthread_create(pub) failed: %s", strerror(errno));
-        udp_tx_close(&ctx->tx);
+        ws_shutdown(&ctx->ws);
         return -1;
     }
     pthread_detach(ctx->pub_tid);
     HLOGI(UI_LOG_TAG, "Publisher thread started");
 
     if (waterfall_enabled) {
-        // Start spectrum publisher thread - high-rate FFT/waterfall broadcaster
+        // Start spectrum publisher thread - high-rate FFT/waterfall broadcaster (via WebSocket)
         if (pthread_create(&ctx->spec_tid, NULL, spectrum_publisher_thread, ctx) != 0) {
             HLOGE(UI_LOG_TAG, "pthread_create(spec) failed: %s", strerror(errno));
-            // Non-fatal: status still works without spectrum
             HLOGW(UI_LOG_TAG, "Spectrum publisher thread not started (waterfall may not update)");
         } else {
             pthread_detach(ctx->spec_tid);
@@ -641,71 +463,7 @@ int ui_comm_init(ui_ctx_t *ctx, const char *ip, uint16_t tx_port, int waterfall_
 void ui_comm_shutdown(ui_ctx_t *ctx)
 {
     // Threads check shutdown_ flag and will exit on their own.
-    // Close the TX sockets.
-    udp_tx_close(&ctx->tx);
-    spectrum_tx_close(&ctx->spectrum_tx);
+    // Shut down the WebSocket server.
+    ws_shutdown(&ctx->ws);
     HLOGI(UI_LOG_TAG, "Shut down");
 }
-
-#endif /* !TEST_MAIN */
-
-// ---------------- MAIN TEST ----------------
-
-#ifdef TEST_MAIN
-int main(int argc, char *argv[]) {
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s <tx_ip> <tx_port> <rx_port>\n", argv[0]);
-        return 1;
-    }
-
-    const char *tx_ip = argv[1];
-    int tx_port = atoi(argv[2]);
-    int rx_port = atoi(argv[3]);
-
-    pthread_t rx_thread;
-    rx_args_t rxa = { .listen_port = (uint16_t)rx_port };
-    pthread_create(&rx_thread, NULL, rx_thread_main, &rxa);
-    pthread_detach(rx_thread);
-
-    udp_tx_t tx;
-    if (udp_tx_init(&tx, tx_ip, (uint16_t)tx_port) != 0) {
-        fprintf(stderr, "TX init failed\n");
-        return 1;
-    }
-
-    srand((unsigned)time(NULL));
-    int counter = 0;
-
-    while (1) {
-        // Send status
-        int bitrate = (rand() % 2) ? 1200 : 2400;
-        double snr = 5.0 - (rand() % 100) / 10.0;
-        int sync = rand() % 2;
-        modem_direction_t dir = (counter % 2) ? DIR_TX : DIR_RX;
-        int client = rand() % 2;
-        long bytes_transmitted = rand() % 100000;
-        long bytes_received = rand() % 100000;
-
-        udp_tx_send_status(&tx, bitrate, snr, "K1ABC", "N0XYZ", sync, dir, client,
-                           bytes_transmitted, bytes_received, 1 /* waterfall=true for test */);
-
-        // Occasionally send a soundcard list
-        if (counter % 3 == 0) {
-            const char *soundcards[] = { "hw:0,0", "hw:1,0", "hw:2,0" };
-            udp_tx_send_soundcard_list(&tx, "hw:1,0", soundcards, 3);
-        }
-
-        // Occasionally send a radio list
-        if (counter % 5 == 0) {
-            const char *radios[] = { "Radio A", "Radio B", "Radio C" };
-            udp_tx_send_radio_list(&tx, "Radio B", radios, 3);
-        }
-
-        counter++;
-        hermes_usleep(500 * 1000); // 500 ms
-    }
-
-    udp_tx_close(&tx);
-    return 0;
-}
-#endif

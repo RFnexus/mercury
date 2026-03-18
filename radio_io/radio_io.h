@@ -47,4 +47,20 @@ void radio_io_key_off(void);
 /* List all hamlib-supported radio models and exit. */
 void radio_io_list_models(void);
 
+/* Populate arrays with hamlib radio IDs and display names.
+ * Returns number of radios written (up to max_count), or 0 if hamlib
+ * is not compiled in. */
+int radio_io_get_radio_list(char ids[][16], char names[][64], int max_count);
+
+/* Restart radio subsystem with a new radio type.
+ * Thread-safe — blocks key_on / key_off during the restart cycle.
+ * Returns 0 on success, -1 on failure. */
+int radio_io_restart(int new_radio_type, const char *device_path);
+
+/* Return the device path used by the current (or last) init. */
+const char *radio_io_get_device_path(void);
+
+/* Return the current radio type (RADIO_TYPE_NONE, RADIO_TYPE_SHM, or hamlib model ID). */
+int radio_io_get_radio_type(void);
+
 #endif /* RADIO_IO_H_ */

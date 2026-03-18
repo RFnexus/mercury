@@ -38,6 +38,12 @@ extern cbuf_handle_t playback_buffer;
 int audioio_init_internal(char *capture_dev, char *playback_dev, int audio_subsys, int capture_channel_layout, pthread_t *radio_capture,
 						  pthread_t *radio_playback);
 
+int audioio_init_buffers(void);
+void audioio_deinit_buffers(void);
+
+int audioio_restart(const char *capture_dev, const char *playback_dev,
+                    int audio_subsys, int capture_channel_layout);
+
 int audioio_deinit(pthread_t *radio_capture, pthread_t *radio_playback);
 int audioio_pick_default_subsystem(void);
 
@@ -46,3 +52,10 @@ int rx_transfer(double *buffer, size_t len);
 
 
 void list_soundcards(int audio_system);
+
+// Enumerate device names and IDs into caller-supplied buffers.
+// mode: 0 = FFAUDIO_DEV_PLAYBACK, 1 = FFAUDIO_DEV_CAPTURE
+// Returns the number of devices found (up to max_count).
+// Each entry in ids[] and dev_names[] will be a NUL-terminated string.
+int get_soundcard_list(int audio_system, int mode,
+                       char ids[][64], char dev_names[][64], int max_count);
