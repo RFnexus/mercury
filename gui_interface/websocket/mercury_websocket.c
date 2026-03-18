@@ -36,20 +36,15 @@
 
 extern const void *portable_memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen);
 
-#if MG_TLS != MG_TLS_NONE
-#define MERCURY_WS_USE_TLS 1
-#define MERCURY_WS_SCHEME "wss"
-#else
-#define MERCURY_WS_USE_TLS 0
-#define MERCURY_WS_SCHEME "ws"
-#endif
-
 #define WS_LOG_TAG "websocket"
 
 // ---- Internal state shared with the server thread ----
 static struct mg_mgr s_mgr;            // Mongoose event manager
 static ws_ctx_t     *s_ws_ctx = NULL;  // Back-pointer to the caller context
-#if MERCURY_WS_USE_TLS
+
+// TLS material (PEM-encoded): loaded at init when tls_enabled=true.
+// Protected by compile-time guard so this compiles cleanly even with MG_TLS_NONE.
+#if MG_TLS != MG_TLS_NONE
 static struct mg_str s_tls_cert = {0};
 static struct mg_str s_tls_key = {0};
 
@@ -215,13 +210,15 @@ static void ws_event_handler(struct mg_connection *c, int ev, void *ev_data)
 {
     if (ev == MG_EV_ACCEPT)
     {
-#if MERCURY_WS_USE_TLS
-        // TLS handshake for WSS connections
-        struct mg_tls_opts opts = {
-            .cert = s_tls_cert,
+#if MG_TLS != MG_TLS_NONE
+        // Initiate TLS handshake when running in WSS mode
+        if (s_ws_ctx && s_ws_ctx->tls_enabled) {
+            struct mg_tls_opts opts = {
+                .cert = s_tls_cert,
             .key = s_tls_key,
-        };
-        mg_tls_init(c, &opts);
+            };
+            mg_tls_init(c, &opts);
+        }
 #endif
     }
     else if (ev == MG_EV_HTTP_MSG)
@@ -305,25 +302,36 @@ int ws_init(ws_ctx_t *ctx,
             uint16_t port,
             const char *web_root,
             ws_command_callback_t cmd_callback,
-            void *cb_data)
+            void *cb_data,
+            bool tls_enabled)
 {
     if (!ctx)
         return -1;
 
     memset(ctx, 0, sizeof(*ctx));
     ctx->running = true;
+    ctx->tls_enabled = tls_enabled;
     ctx->cmd_callback = cmd_callback;
     ctx->cmd_callback_data = cb_data;
 
-    snprintf(ctx->listen_url, sizeof(ctx->listen_url), MERCURY_WS_SCHEME "://0.0.0.0:%u", port);
+    snprintf(ctx->listen_url, sizeof(ctx->listen_url),
+             "%s://0.0.0.0:%u", tls_enabled ? "wss" : "ws", port);
 
     if (web_root)
         strncpy(ctx->web_root, web_root, sizeof(ctx->web_root) - 1);
     else
         ctx->web_root[0] = '\0';
 
-#if MERCURY_WS_USE_TLS
-    if (ws_load_tls_material() != 0) {
+#if MG_TLS != MG_TLS_NONE
+    if (tls_enabled) {
+        if (ws_load_tls_material() != 0) {
+            ctx->running = false;
+            return -1;
+        }
+    }
+#else
+    if (tls_enabled) {
+        HLOGE(WS_LOG_TAG, "WSS requested but this build has no TLS support (MG_TLS_NONE)");
         ctx->running = false;
         return -1;
     }
@@ -335,8 +343,9 @@ int ws_init(ws_ctx_t *ctx,
     {
         HLOGE(WS_LOG_TAG, "pthread_create failed: %s", strerror(errno));
         ctx->running = false;
-#if MERCURY_WS_USE_TLS
-        ws_free_tls_material();
+#if MG_TLS != MG_TLS_NONE
+        if (tls_enabled)
+            ws_free_tls_material();
 #endif
         return -1;
     }
@@ -387,8 +396,9 @@ void ws_shutdown(ws_ctx_t *ctx)
     ctx->running = false;
     pthread_join(ctx->ws_tid, NULL);
     s_ws_ctx = NULL;
-#if MERCURY_WS_USE_TLS
-    ws_free_tls_material();
+#if MG_TLS != MG_TLS_NONE
+    if (ctx->tls_enabled)
+        ws_free_tls_material();
 #endif
 
     HLOGI(WS_LOG_TAG, "Shut down");

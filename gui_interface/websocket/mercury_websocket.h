@@ -61,6 +61,9 @@ typedef struct {
     pthread_t ws_tid;                  // websocket server thread
     volatile bool running;             // thread run flag (set false to stop)
 
+    // Runtime TLS mode: false = plain WS (default), true = WSS (requires certs)
+    bool tls_enabled;
+
     // Callback for incoming UI commands
     ws_command_callback_t cmd_callback;
     void *cmd_callback_data;           // opaque pointer passed to cmd_callback
@@ -88,13 +91,16 @@ typedef struct {
  * @param cmd_callback   Function called when a command is received from the UI.
  *                       May be NULL if no command handling is needed yet.
  * @param cb_data        Opaque pointer forwarded to cmd_callback.
+ * @param tls_enabled    false = plain WS (default); true = WSS using mongoose
+ *                       built-in TLS with certs at CFG_SSL_CERT / CFG_SSL_KEY.
  * @return 0 on success, -1 on error.
  */
 int ws_init(ws_ctx_t *ctx,
             uint16_t port,
             const char *web_root,
             ws_command_callback_t cmd_callback,
-            void *cb_data);
+            void *cb_data,
+            bool tls_enabled);
 
 /**
  * Send a JSON text message to all connected WebSocket clients.

@@ -30,7 +30,6 @@ ifeq ($(OS),Windows_NT)
 	FFAUDIO_LINKFLAGS += -ldsound -ldxguid
 	FFAUDIO_LINKFLAGS += -lws2_32
 	FFAUDIO_LINKFLAGS += -static-libgcc -static-libstdc++ -l:libwinpthread.a
-	WS_TLS_LDFLAGS =
 	ifneq ($(strip $(HAMLIB_W64_LIBS)),)
 		HAVE_HAMLIB = 1
 		HAMLIB_CFLAGS = -I$(HAMLIB_W64_DIR)/include -DHAVE_HAMLIB
@@ -41,7 +40,6 @@ ifeq ($(OS),Windows_NT)
 		HAMLIB_LDFLAGS =
 	endif
 else
-	WS_TLS_LDFLAGS = -lssl -lcrypto
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
 	FFAUDIO_LINKFLAGS += -lpulse
@@ -93,7 +91,7 @@ else
 BINARY = mercury
 endif
 
-LDFLAGS=$(FFAUDIO_LINKFLAGS) -lm $(HAMLIB_LDFLAGS) $(WS_TLS_LDFLAGS)
+LDFLAGS=$(FFAUDIO_LINKFLAGS) -lm $(HAMLIB_LDFLAGS)
 
 MERCURY_LINK_INPUTS = \
 	main.o datalink_arq/arq.o datalink_arq/fsm.o datalink_arq/arith.o datalink_arq/arq_channels.o \
