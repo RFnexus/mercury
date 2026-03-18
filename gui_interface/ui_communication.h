@@ -63,6 +63,7 @@ struct ui_ctx {
     // WebSocket server (bidirectional: status TX + command RX)
     ws_ctx_t ws;
     uint16_t ws_port;           // WebSocket listen port (default=10000)
+    bool tls_enabled;           // false = plain WS (default), true = WSS
 
     pthread_t pub_tid;
     pthread_t spec_tid;         // dedicated spectrum publisher thread (20 fps)
@@ -94,12 +95,14 @@ void *spectrum_publisher_thread(void *arg);
 
 // High-level init/shutdown for the UI communication subsystem
 // ws_port: WebSocket server port (default=10000)
+// tls_enabled: false = plain WS (default), true = WSS (requires cert/key on disk)
 // waterfall_enabled: 1 = start spectrum publisher thread (default), 0 = skip it
 // audio_system: AUDIO_SUBSYSTEM_* constant for soundcard enumeration
 // selected_capture: currently active capture device name (may be NULL)
 // selected_playback: currently active playback device name (may be NULL)
-int ui_comm_init(ui_ctx_t *ctx, uint16_t ws_port, int waterfall_enabled,
-                 int audio_system, const char *selected_capture, const char *selected_playback,
+int ui_comm_init(ui_ctx_t *ctx, uint16_t ws_port, bool tls_enabled,
+                 int waterfall_enabled, int audio_system,
+                 const char *selected_capture, const char *selected_playback,
                  int rx_input_channel);
 void ui_comm_shutdown(ui_ctx_t *ctx);
 

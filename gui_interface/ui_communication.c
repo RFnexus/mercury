@@ -406,8 +406,9 @@ void *spectrum_publisher_thread(void *arg)
 
 // ---------------- HIGH-LEVEL INIT / SHUTDOWN ----------------
 
-int ui_comm_init(ui_ctx_t *ctx, uint16_t ws_port, int waterfall_enabled,
-                 int audio_system, const char *selected_capture, const char *selected_playback,
+int ui_comm_init(ui_ctx_t *ctx, uint16_t ws_port, bool tls_enabled,
+                 int waterfall_enabled, int audio_system,
+                 const char *selected_capture, const char *selected_playback,
                  int rx_input_channel)
 {
     memset(ctx, 0, sizeof(*ctx));
@@ -416,6 +417,7 @@ int ui_comm_init(ui_ctx_t *ctx, uint16_t ws_port, int waterfall_enabled,
     ctx->audio_system = audio_system;
     ctx->rx_input_channel = rx_input_channel;
     ctx->ws_port = ws_port;
+    ctx->tls_enabled = tls_enabled;
     if (selected_capture)
         strncpy(ctx->selected_capture_dev, selected_capture, sizeof(ctx->selected_capture_dev) - 1);
     else
@@ -428,7 +430,7 @@ int ui_comm_init(ui_ctx_t *ctx, uint16_t ws_port, int waterfall_enabled,
     // Initialize WebSocket server (bidirectional: status TX + command RX)
     // Serve static test page from websocket/web/ directory
     if (ws_init(&ctx->ws, ws_port, "gui_interface/websocket/web",
-                ws_command_handler, ctx) != 0) {
+                ws_command_handler, ctx, tls_enabled) != 0) {
         HLOGE(UI_LOG_TAG, "Failed to init WebSocket server on port %u", ws_port);
         return -1;
     }
