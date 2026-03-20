@@ -1379,7 +1379,27 @@ static void fsm_dflow(arq_session_t *sess, const arq_event_t *ev)
         }
         else if (ev->id == ARQ_EV_TIMER_PEER_BACKLOG)
         {
-            if (g_cbs.tx_backlog && g_cbs.tx_backlog() > 0)
+            /* Inactivity check FIRST - must fire regardless of local
+             * tx_backlog, otherwise TURN_REQ retries loop forever when
+             * the peer disappears while we have pending data. */
+            if (sess->last_rx_ms > 0 &&
+                hermes_uptime_ms() - sess->last_rx_ms >=
+                    (uint64_t)ARQ_IRS_INACTIVITY_S * 1000)
+            {
+                /* Peer has been silent too long - probe with keepalive.
+                 * If the peer responds, keepalive_miss_count resets and
+                 * we return to IDLE_IRS.  If not, the keepalive retry
+                 * loop disconnects after ARQ_KEEPALIVE_MISS_LIMIT misses. */
+                HLOGW(LOG_COMP, "IRS inactivity (%ds without RX) - sending keepalive",
+                      (int)((hermes_uptime_ms() - sess->last_rx_ms) / 1000));
+                sess->keepalive_miss_count = 0;
+                send_ctrl_frame(sess, ARQ_SUBTYPE_KEEPALIVE);
+                tm = arq_protocol_mode_timing(sess->control_mode);
+                dflow_enter(sess, ARQ_DFLOW_KEEPALIVE_TX,
+                            deadline_from_s(tm ? tm->retry_interval_s : 7.0f),
+                            ARQ_EV_TIMER_RETRY);
+            }
+            else if (g_cbs.tx_backlog && g_cbs.tx_backlog() > 0)
             {
                 send_ctrl_frame(sess, ARQ_SUBTYPE_TURN_REQ);
                 sess->tx_retries_left = ARQ_TURN_REQ_RETRIES;
