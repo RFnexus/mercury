@@ -155,22 +155,24 @@ windows:
 	$(MAKE) clean OS=Windows_NT CC=$(MINGW_CC) AR=$(MINGW_AR)
 	$(MAKE) -j$$(nproc) OS=Windows_NT CC=$(MINGW_CC) AR=$(MINGW_AR)
 
-WINDOWS_ZIP = mercury-w64-$(GIT_HASH).zip
+MERCURY_VERSION ?= $(shell grep 'define VERSION__' main.c | head -1 | sed 's/.*"\(.*\)".*/\1/')
+WINDOWS_DIR = mercury-$(MERCURY_VERSION)
+WINDOWS_ZIP = $(WINDOWS_DIR)-w64-$(GIT_HASH).zip
 
 windows-zip: windows
-	rm -rf mercury-w64 $(WINDOWS_ZIP)
-	mkdir -p mercury-w64
-	cp mercury.exe mercury-w64/
+	rm -rf $(WINDOWS_DIR) $(WINDOWS_ZIP)
+	mkdir -p $(WINDOWS_DIR)
+	cp mercury.exe $(WINDOWS_DIR)/
 	if ls $(HAMLIB_W64_DIR)/bin/*.dll >/dev/null 2>&1; then \
-		cp $(HAMLIB_W64_DIR)/bin/*.dll mercury-w64/; \
+		cp $(HAMLIB_W64_DIR)/bin/*.dll $(WINDOWS_DIR)/; \
 	fi
-	cd mercury-w64 && zip -9 ../$(WINDOWS_ZIP) *
-	rm -rf mercury-w64
+	zip -9r $(WINDOWS_ZIP) $(WINDOWS_DIR)
+	rm -rf $(WINDOWS_DIR)
 	@echo "Created $(WINDOWS_ZIP)"
 
 clean:
-	rm -f mercury mercury.exe *.o .git_hash_stamp mercury-w64-*.zip
-	rm -rf mercury-w64
+	rm -f mercury mercury.exe *.o .git_hash_stamp mercury-*.zip
+	rm -rf mercury-[0-9]*
 	$(MAKE) -C modem clean
 	$(MAKE) -C datalink_arq clean
 	$(MAKE) -C datalink_broadcast clean
