@@ -38,7 +38,7 @@ gui_interface: ui_communication.c ui_communication.h \
                websocket/mongoose.c websocket/mongoose.h \
                websocket/mercury_websocket.c websocket/mercury_websocket.h
 	$(CC) $(CFLAGS_COMMON) -c ui_communication.c -o ui_communication.o
-	$(CC) $(WS_CFLAGS) -c websocket/mongoose.c -o websocket/mongoose.o
+	$(CC) $(WS_CFLAGS) -Wno-maybe-uninitialized -c websocket/mongoose.c -o websocket/mongoose.o
 	$(CC) $(WS_CFLAGS) -c websocket/mercury_websocket.c -o websocket/mercury_websocket.o
 
 clean:

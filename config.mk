@@ -19,7 +19,9 @@ ifeq ($(origin AR),default)
 AR = ar
 endif
 
+EXTRA_CFLAGS := $(CFLAGS)
 COMMON_CFLAGS ?= -Wall -O2 -std=gnu11 -pthread -D_GNU_SOURCE
+COMMON_CFLAGS += $(EXTRA_CFLAGS)
 
 # --- Platform-specific flags for aarch64 ---
 UNAME_M := $(shell uname -m 2>/dev/null)
