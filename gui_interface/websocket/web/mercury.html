@@ -971,8 +971,7 @@ document.getElementById("wsPort").addEventListener("keydown", function(e) {
 
 (function init() {
   // Set default host from current location
-  const host = location.hostname || "127.0.0.1";
-  document.getElementById("wsHost").value = host;
+  document.getElementById("wsHost").value = "127.0.0.1";
 
   // Auto-connect
   autoReconnect = true;
