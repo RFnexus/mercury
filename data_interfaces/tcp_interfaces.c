@@ -63,6 +63,7 @@ static _Atomic uint32_t last_bitrate_bps = 0;
 static chan_t *tnc_tx_chan = NULL;
 static atomic_ulong tnc_tx_drop_count = 0;
 static atomic_int tnc_last_buffer_sent = -1;
+static atomic_bool bcast_client_done = false;
 
 #if defined(MSG_NOSIGNAL)
 #define HERMES_SEND_FLAGS MSG_NOSIGNAL
@@ -791,15 +792,29 @@ void *send_thread(void *client_socket_ptr)
         return NULL;
     }
 
-    while (!shutdown_)
+    while (!shutdown_ && !bcast_client_done)
     {
+        /* Poll size_buffer() instead of blocking in read_buffer()'s
+         * condvar wait.  Re-check bcast_client_done after size_buffer()
+         * returns to close the race where clear_buffer() drains the
+         * ring between our size check and the read_buffer() call. */
+        if (size_buffer(data_rx_buffer_broadcast) < frame_size)
+        {
+            msleep(100);
+            continue;
+        }
+
+        if (bcast_client_done)
+            break;
+
         if (read_buffer(data_rx_buffer_broadcast, frame_buffer, frame_size) < 0)
             break;
 
         int kiss_len = kiss_write_frame(frame_buffer, (int)frame_size, kiss_buffer);
         if (send_all(client_socket, kiss_buffer, (size_t)kiss_len) < 0)
         {
-            perror("Error sending KISS broadcast frame");
+            HLOGW("tcp-bcast", "Error sending KISS broadcast frame: %s",
+                  strerror(errno));
             break;
         }
     }
@@ -928,15 +943,19 @@ void *tcp_server_thread(void *port_ptr)
 
         HLOGI("tcp-bcast", "Client connected.");
 
+        bcast_client_done = false;
+
         pthread_t recv_tid, send_tid;
 
-        // Create threads for receiving and sending data
         pthread_create(&recv_tid, NULL, recv_thread, (void *)&client_socket);
         pthread_create(&send_tid, NULL, send_thread, (void *)&client_socket);
 
-        // Wait for threads to finish
+        /* recv_thread exits when the client disconnects (recv returns 0).
+         * Signal send_thread to stop and drain the RX buffer so it does
+         * not stay blocked inside a condvar wait holding the mutex. */
         pthread_join(recv_tid, NULL);
-        pthread_cancel(send_tid);
+        bcast_client_done = true;
+        clear_buffer(data_rx_buffer_broadcast);
         pthread_join(send_tid, NULL);
 
         SOCK_CLOSE(client_socket);
