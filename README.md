@@ -114,10 +114,6 @@ Edit config.mk with your C compiler and appropriate flags (defaults should be fi
 make
 ```
 
-## API documentation (Doxygen)
-
-Online HTML docs: https://rhizomatica.github.io/mercury/
-
 If you have `doxygen` installed, you can generate HTML documentation for the ARQ subsystem:
 
 ```
@@ -129,6 +125,10 @@ Output will be generated in `docs/html/` (open `docs/html/index.html` in a brows
 ```
 make doxygen-clean
 ```
+
+## Documentation
+
+Online HTML docs: https://rhizomatica.github.io/mercury/
 
 ## Logging and timing traces
 
@@ -145,6 +145,12 @@ See [docs/ARQ.md](docs/ARQ.md) for full ARQ architecture, protocol reference, an
 ## Physical Layer
 
 Mercury v2 currently uses FreeDV modulator code developed by David Rowe. We plan to introduce other modulator modes present in Mercury v1.
+
+# Graphical Interface
+
+Mercuryv2 currently has 2 interfaces:
+- Mercury-qt: https://github.com/Rhizomatica/mercury-qt
+- Web-based: located in docs/app in this repository, and accessible via https://rhizomatica.github.io/mercury/app/
 
 ## About
 
