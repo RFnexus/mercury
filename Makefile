@@ -148,7 +148,7 @@ internal_deps:
 	$(MAKE) -C data_interfaces
 	$(MAKE) -C audioio
 	$(MAKE) -C common
-	$(MAKE) -C gui_interface gui_interface
+	$(MAKE) -C gui_interface
 	$(MAKE) -C radio_io
 
 windows:

@@ -31,17 +31,18 @@ WS_CFLAGS = $(COMMON_CFLAGS) -Iwebsocket -DMG_TLS=MG_TLS_BUILTIN
 OBJS = ui_communication.o
 WS_OBJS = websocket/mongoose.o websocket/mercury_websocket.o
 
-all: gui_interface
+all: $(OBJS) $(WS_OBJS)
 
-# Library objects — used by top-level mercury build
-gui_interface: ui_communication.c ui_communication.h \
-               websocket/mongoose.c websocket/mongoose.h \
-               websocket/mercury_websocket.c websocket/mercury_websocket.h
+ui_communication.o: ui_communication.c ui_communication.h
 	$(CC) $(CFLAGS_COMMON) -c ui_communication.c -o ui_communication.o
+
+websocket/mongoose.o: websocket/mongoose.c websocket/mongoose.h
 	$(CC) $(WS_CFLAGS) -Wno-maybe-uninitialized -c websocket/mongoose.c -o websocket/mongoose.o
+
+websocket/mercury_websocket.o: websocket/mercury_websocket.c websocket/mercury_websocket.h
 	$(CC) $(WS_CFLAGS) -c websocket/mercury_websocket.c -o websocket/mercury_websocket.o
 
 clean:
 	rm -f $(OBJS) $(WS_OBJS)
 
-.PHONY: all gui_interface clean
+.PHONY: all clean
