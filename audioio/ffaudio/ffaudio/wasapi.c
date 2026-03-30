@@ -39,6 +39,7 @@ struct ffaudio_dev {
 	ffsize err;
 
 	wchar_t *id;
+	char *id_utf8;
 	char *name;
 	ffuint is_default :1;
 };
@@ -68,6 +69,7 @@ void ffwasapi_dev_free(ffaudio_dev *d)
 		CoTaskMemFree(d->def_id);
 	if (d->id != NULL)
 		CoTaskMemFree(d->id);
+	ffmem_free(d->id_utf8);
 	if (d->dcoll != NULL)
 		IMMDeviceCollection_Release(d->dcoll);
 	ffmem_free(d->name);
@@ -122,6 +124,13 @@ int ffwasapi_dev_next(ffaudio_dev *d)
 
 	if (0 != (r = IMMDevice_GetId(dev, &d->id))) {
 		d->errfunc = "IMMDevice_GetId";
+		goto end;
+	}
+
+	ffmem_free(d->id_utf8);
+	if (NULL == (d->id_utf8 = ffsz_alloc_wtou(d->id))) {
+		r = GetLastError();
+		rc = -FFAUDIO_ERROR;
 		goto end;
 	}
 
@@ -183,7 +192,7 @@ const char* ffwasapi_dev_info(ffaudio_dev *d, ffuint i)
 {
 	switch (i) {
 	case FFAUDIO_DEV_ID:
-		return (char*)d->id;
+		return d->id_utf8;
 
 	case FFAUDIO_DEV_NAME:
 		return d->name;
@@ -515,6 +524,7 @@ int ffwasapi_open(ffaudio_buf *b, ffaudio_conf *conf, ffuint flags)
 	HRESULT r;
 	IMMDeviceEnumerator *enu = NULL;
 	IMMDevice *dev = NULL;
+	wchar_t *dev_id_w = NULL;
 	WAVEFORMATEXTENSIBLE wf;
 	int new_format = 0; // 0:use input format; 1:new format is set; -1:default format is set
 	ffuint find_format = 1;
@@ -545,7 +555,13 @@ int ffwasapi_open(ffaudio_buf *b, ffaudio_conf *conf, ffuint flags)
 			goto end;
 		}
 	} else {
-		if (0 != (r = IMMDeviceEnumerator_GetDevice(enu, (wchar_t*)conf->device_id, &dev))) {
+		dev_id_w = ffsz_alloc_utow(conf->device_id);
+		if (dev_id_w == NULL) {
+			b->errfunc = "ffsz_alloc_utow";
+			r = ERROR_NOT_ENOUGH_MEMORY;
+			goto end;
+		}
+		if (0 != (r = IMMDeviceEnumerator_GetDevice(enu, dev_id_w, &dev))) {
 			b->errfunc = "IMMDeviceEnumerator_GetDevice";
 			goto end;
 		}
@@ -689,6 +705,7 @@ int ffwasapi_open(ffaudio_buf *b, ffaudio_conf *conf, ffuint flags)
 	rc = 0;
 
 end:
+	ffmem_free(dev_id_w);
 	if (rc != 0) {
 		wasapi_close(b);
 		if (rc == FFAUDIO_ERROR)

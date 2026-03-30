@@ -647,15 +647,8 @@ int get_soundcard_list(int audio_system, int mode,
         const char *name = audio->dev_info(d, FFAUDIO_DEV_NAME);
         if (id && count < max_count)
         {
-#if defined(_WIN32)
-            if (audio_system == AUDIO_SUBSYSTEM_DSOUND)
-                guid_to_str((const GUID *)id, ids[count], 64);
-            else
-#endif
-            {
-                strncpy(ids[count], id, 63);
-                ids[count][63] = '\0';
-            }
+            strncpy(ids[count], id, 63);
+            ids[count][63] = '\0';
             if (name) {
                 strncpy(dev_names[count], name, 63);
                 dev_names[count][63] = '\0';
