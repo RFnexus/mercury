@@ -12,6 +12,12 @@ on:
   pull_request:
     branches: [mercuryv2]
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Target branch | default = "mercuryv2"'
+        required: false
+        type: string
+        default: 'mercuryv2'
 
 jobs:
   unit-tests:
@@ -38,6 +44,7 @@ jobs:
           repository: Rhizomatica/mercury
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
           fetch-depth: 0
+          ref: ${{ github.event.inputs.branch || 'mercuryv2' }}
 
       - name: Git Safe Directory
         run: git config --global --add safe.directory /__w/mercury/mercury
